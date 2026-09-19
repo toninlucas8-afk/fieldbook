@@ -1,0 +1,21 @@
+{
+  "name": "fieldbook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "App di cantiere per condividere foto, documenti e dati dei lavori di montaggio",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "npm --prefix web install && npm --prefix web run build",
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.658.0",
+    "@aws-sdk/s3-request-presigner": "^3.658.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  }
+}

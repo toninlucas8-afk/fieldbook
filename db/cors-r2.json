@@ -1,0 +1,12 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://METTI-QUI-L-INDIRIZZO-DELL-APP.onrender.com",
+      "http://localhost:5173"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]

@@ -1,0 +1,27 @@
+# Render legge questo file e imposta il servizio da solo.
+services:
+  - type: web
+    name: fieldbook
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /salute
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: ADMIN_NOME
+        sync: false
+      - key: ADMIN_PIN
+        sync: false
