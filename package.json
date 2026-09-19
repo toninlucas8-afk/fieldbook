@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "description": "App di cantiere per condividere foto, documenti e dati dei lavori di montaggio",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "npm --prefix web install && npm --prefix web run build",
+    "build": "npm --prefix web install --include=dev && npm --prefix web run build",
     "start": "node server/index.js",
     "dev": "node --watch server/index.js"
   },
