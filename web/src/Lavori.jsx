@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { accendiAvvisi, api, avvisiAttivi, avvisiPossibili, spegniAvvisi } from './api.js'
+import { ascoltaCoda, svuotaCoda } from './coda.js'
 import { giornoISO, iniziali, nomeCliente, piuGiorni, quando, quandoLavoro, titoloGiorno } from './utili.js'
 
 const VISTE = [
@@ -18,6 +19,9 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
   const [errore, setErrore] = useState('')
   const [menu, setMenu] = useState(false)
   const [senzaCopertina, setSenzaCopertina] = useState(() => new Set())
+  const [coda, setCoda] = useState({ totali: 0 })
+
+  useEffect(() => ascoltaCoda(setCoda), [])
 
   // Cercando si guarda in tutto l'archivio: filtrare per giorno darebbe
   // "non trovato" su un lavoro che invece c'e'.
@@ -98,6 +102,13 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
         </div>
 
         {errore && <div className="errore">{errore}</div>}
+
+        {coda.totali > 0 && (
+          <div className="avviso" onClick={() => svuotaCoda()}>
+            {coda.totali} {coda.totali === 1 ? 'foto aspetta' : 'foto aspettano'} il campo per partire.
+            Restano sul telefono, non si perdono.
+          </div>
+        )}
 
         {caricando
           ? <div className="vuoto">Carico i lavori…</div>

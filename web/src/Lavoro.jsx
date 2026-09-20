@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, caricaDocumento, caricaFoto } from './api.js'
+import { api, caricaDocumento } from './api.js'
 import Firma from './Firma.jsx'
+import { ascoltaCoda, mandaFotoOAccoda, svuotaCoda } from './coda.js'
 import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando, soloData } from './utili.js'
 
 export default function Lavoro ({ id, utente, indietro, segnale }) {
@@ -16,16 +17,23 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [colleghi, setColleghi] = useState([])
   const [faiFirmare, setFaiFirmare] = useState(false)
   const [copiato, setCopiato] = useState(false)
+  const [coda, setCoda] = useState({ totali: 0, per: {}, errore: '', sto: false })
 
   const inputFoto = useRef(null)
   const inputFotocamera = useRef(null)
   const inputDoc = useRef(null)
 
+  const segnala = useCallback((e) => setErrore(e.message), [])
+
+  // Il rinfresco della scheda gira da solo, anche dopo aver messo una foto in
+  // attesa. Se manca il campo non c'e' niente da segnalare: la scheda gialla
+  // lo dice gia', e un avviso rosso in cima spaventerebbe e basta.
   const ricarica = useCallback(async () => {
-    try { setLavoro(await api.lavoro(id)) } catch (e) { setErrore(e.message) }
+    try { setLavoro(await api.lavoro(id)) } catch (e) { if (!e?.linea) setErrore(e.message) }
   }, [id])
 
   useEffect(() => { ricarica() }, [ricarica])
+  useEffect(() => ascoltaCoda(setCoda), [])
 
   // Una foto caricata da un collega arriva qui e compare senza fare niente.
   useEffect(() => {
@@ -44,7 +52,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
 
     for (let i = 0; i < scelti.length; i++) {
       try {
-        await caricaFoto(id, scelti[i])
+        // Senza campo la foto non si perde: resta sul telefono e parte dopo.
+        await mandaFotoOAccoda(id, scelti[i])
       } catch (e) {
         setErrore(`${e.message} (foto ${i + 1} di ${scelti.length})`)
         break
@@ -62,7 +71,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     try {
       for (const f of scelti) await caricaDocumento(id, f)
       ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   // Lo stato si cambia con un tocco e si vede subito: la conferma dal
@@ -72,7 +81,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     setLavoro((l) => ({ ...l, stato }))
     try {
       await api.aggiornaLavoro(id, { stato })
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
     ricarica()
   }
 
@@ -85,7 +94,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     setLavoro((l) => ({ ...l, data_lavoro: dataLavoro, ora_lavoro: oraLavoro }))
     try {
       await api.programmaLavoro(id, { data_lavoro: dataLavoro, ora_lavoro: oraLavoro })
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
     ricarica()
   }
 
@@ -94,7 +103,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
       if (dentro) await api.mettiInSquadra(id, persona.id)
       else await api.togliDaSquadra(id, persona.id)
       await ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function eliminaDocumento (doc) {
@@ -102,7 +111,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     try {
       await api.eliminaDocumento(doc.id)
       ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function aggiungiNota (e) {
@@ -114,7 +123,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
       await api.creaAnnotazione(id, testo)
       setNota('')
       await ricarica()
-    } catch (err) { setErrore(err.message) } finally { setSalvoNota(false) }
+    } catch (err) { segnala(err) } finally { setSalvoNota(false) }
   }
 
   async function segnaNota (a) {
@@ -124,7 +133,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     }))
     try {
       await api.segnaAnnotazione(a.id, !a.fatta)
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
     ricarica()
   }
 
@@ -133,7 +142,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     try {
       await api.eliminaAnnotazione(a.id)
       ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function eliminaFirma (firma) {
@@ -141,14 +150,14 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     try {
       await api.eliminaFirma(firma.id)
       ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function creaLink () {
     try {
       await api.creaCondivisione(id)
       await ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function annullaLink (condivisione) {
@@ -156,7 +165,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     try {
       await api.eliminaCondivisione(condivisione.id)
       ricarica()
-    } catch (e) { setErrore(e.message) }
+    } catch (e) { segnala(e) }
   }
 
   async function condividiLink (indirizzo) {
@@ -197,6 +206,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const squadra = lavoro.assegnati || []
   const inSquadra = new Set(squadra.map((p) => p.id))
   const firme = lavoro.firme || []
+  const inAttesaQui = coda.per[id] || 0
   const link = (lavoro.condivisioni || [])[0]
 
   return (
@@ -295,6 +305,20 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
             <strong style={{ fontSize: 14.5 }}>Sto caricando {invio.fatte + 1} di {invio.totali}…</strong>
             <div className="avanzamento"><div style={{ width: `${(invio.fatte / invio.totali) * 100}%` }} /></div>
             <small style={{ color: 'var(--testo-tenue)' }}>Puoi restare su questa schermata.</small>
+          </div>
+        )}
+
+        {inAttesaQui > 0 && (
+          <div className="carta in-attesa">
+            <strong>{inAttesaQui} {inAttesaQui === 1 ? 'foto in attesa' : 'foto in attesa'} di campo</strong>
+            <p>
+              Restano su questo telefono e partono da sole appena torna la linea.
+              Puoi chiudere l'app.
+            </p>
+            {coda.errore && <small>Ultimo tentativo: {coda.errore}</small>}
+            <button className="bottone chiaro piccolo" onClick={() => svuotaCoda()} disabled={coda.sto}>
+              {coda.sto ? 'Sto provando…' : 'Prova adesso'}
+            </button>
           </div>
         )}
 

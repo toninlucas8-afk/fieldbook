@@ -1,10 +1,25 @@
 // Tutte le chiamate al server passano da qui.
+
+// Quando il telefono e' senza campo la fetch fallisce con un messaggio in
+// inglese del browser. Lo trasformiamo in una frase nostra, marcata, cosi'
+// chi la riceve sa che non e' un errore vero ma solo mancanza di linea.
+export function senzaLinea (messaggio = 'Sei senza linea: riprova quando torna il campo.') {
+  const e = new Error(messaggio)
+  e.linea = true
+  return e
+}
+
 async function chiamata (percorso, opzioni = {}) {
-  const res = await fetch(`/api${percorso}`, {
-    credentials: 'same-origin',
-    headers: opzioni.body ? { 'Content-Type': 'application/json' } : undefined,
-    ...opzioni
-  })
+  let res
+  try {
+    res = await fetch(`/api${percorso}`, {
+      credentials: 'same-origin',
+      headers: opzioni.body ? { 'Content-Type': 'application/json' } : undefined,
+      ...opzioni
+    })
+  } catch {
+    throw senzaLinea()
+  }
 
   if (res.status === 204) return null
   const dati = await res.json().catch(() => ({}))
@@ -105,8 +120,9 @@ async function mettiSuR2 (url, corpo, tipoMime) {
   try {
     res = await fetch(url, { method: 'PUT', body: corpo, headers: { 'Content-Type': tipoMime } })
   } catch {
-    // Qui fetch fallisce senza risposta: o il magazzino foto non accetta
-    // ancora le richieste da questo indirizzo, o il telefono ha perso la rete.
+    // Qui fetch fallisce senza risposta: o il telefono ha perso la rete, o il
+    // magazzino foto non accetta le richieste da questo indirizzo.
+    if (!navigator.onLine) throw senzaLinea()
     throw new Error(
       'Il magazzino foto ha rifiutato il collegamento. Se sei in cantiere con poco campo riprova, ' +
       'altrimenti manca il permesso sul bucket Cloudflare (criterio CORS).'

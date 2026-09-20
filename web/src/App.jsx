@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, ascoltaEventi } from './api.js'
+import { aggiornaConto, svuotaCoda } from './coda.js'
 import Accesso from './Accesso.jsx'
 import Lavori from './Lavori.jsx'
 import Lavoro from './Lavoro.jsx'
@@ -34,6 +35,20 @@ export default function App () {
   useEffect(() => {
     if (!utente) return
     return ascoltaEventi(setSegnale)
+  }, [utente])
+
+  // Le foto scattate senza campo partono da sole: appena si rientra,
+  // quando torna la linea, e ogni tanto mentre l'app e' aperta.
+  useEffect(() => {
+    if (!utente) return
+    aggiornaConto().then(() => svuotaCoda())
+    const quandoTorna = () => svuotaCoda()
+    window.addEventListener('online', quandoTorna)
+    const ogniTanto = setInterval(() => svuotaCoda(), 60_000)
+    return () => {
+      window.removeEventListener('online', quandoTorna)
+      clearInterval(ogniTanto)
+    }
   }, [utente])
 
   // Il tasto "indietro" del telefono chiude la schermata, non l'app.

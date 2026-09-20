@@ -209,6 +209,11 @@ a { color: inherit; }
   color: var(--testo-tenue); background: #eef1f6;
 }
 
+.carta.in-attesa { background: #fff6e5; border-color: #f0c98a; }
+.carta.in-attesa strong { display: block; color: #8a5a00; font-size: 15px; }
+.carta.in-attesa p { margin: 6px 0 10px; font-size: 14px; color: #8a5a00; }
+.carta.in-attesa small { display: block; margin-bottom: 10px; color: #8a5a00; opacity: .8; font-size: 12.5px; }
+
 /* ------------------------------------------------------ firma e consegna */
 
 .pagina-firma { position: fixed; inset: 0; z-index: 70; background: var(--sfondo); overflow-y: auto; }
