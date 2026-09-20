@@ -1,6 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#14243a"/>
-  <rect x="112" y="128" width="288" height="256" rx="28" fill="none" stroke="#f4a63a" stroke-width="28"/>
-  <path d="M112 300l72-64 68 60 56-48 84 72" fill="none" stroke="#f4a63a" stroke-width="28" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="318" cy="206" r="26" fill="#f4a63a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <defs>
+    <linearGradient id="SF" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d3252"/><stop offset="1" stop-color="#101d30"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#SF)"/>
+
+  <g fill="#f4a63a">
+    <path d="M196 104 C180 130 174 166 184 204 L222 198 C222 160 214 128 196 104 Z"/>
+    <path d="M316 104 C332 130 338 166 328 204 L290 198 C290 160 298 128 316 104 Z"/>
+  </g>
+  <path d="M256 150
+           C306 150 342 186 342 226
+           C342 254 328 268 326 292
+           C324 316 340 330 334 352
+           C328 374 338 392 340 430
+           L172 430
+           C174 392 184 374 178 352
+           C172 330 188 316 186 292
+           C184 268 170 254 170 226
+           C170 186 206 150 256 150 Z" fill="#f4a63a"/>
+  <g fill="#14243a" opacity=".85">
+    <path d="M198 140 C190 158 188 178 193 194 L209 191 C209 170 205 154 198 140 Z"/>
+    <path d="M314 140 C322 158 324 178 319 194 L303 191 C303 170 307 154 314 140 Z"/>
+  </g>
+  <ellipse cx="256" cy="306" rx="49" ry="33" fill="#14243a"/>
+  <circle cx="256" cy="306" r="9" fill="#f4a63a"/>
+  <circle cx="198" cy="272" r="12" fill="#14243a"/>
+  <circle cx="314" cy="272" r="12" fill="#14243a"/>
 </svg>
