@@ -2,11 +2,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import { api } from './api.js'
+import { api, resocontoPubblico } from './api.js'
 import { creaAdminSeManca } from './auth.js'
 import { pulisciEventiVecchi } from './eventi.js'
 import { applicaMigrazioni } from './migrazioni.js'
 import { preparaAvvisi } from './avvisi.js'
+import { paginaResoconto, paginaScaduta } from './resoconto.js'
 import { q } from './db.js'
 
 const qui = path.dirname(fileURLToPath(import.meta.url))
@@ -19,6 +20,17 @@ app.use(cookieParser())
 
 app.get('/salute', (req, res) => res.json({ ok: true, ora: new Date().toISOString() }))
 app.use('/api', api)
+
+// Il resoconto per l'azienda: si apre senza account, con il link e basta.
+app.get('/r/:token', async (req, res, next) => {
+  try {
+    const dati = await resocontoPubblico(req.params.token)
+    res.set('X-Robots-Tag', 'noindex, nofollow')
+    res.set('Cache-Control', 'no-store')
+    if (!dati) return res.status(404).type('html').send(paginaScaduta())
+    res.type('html').send(paginaResoconto(dati))
+  } catch (e) { next(e) }
+})
 
 // L'app del telefono: file statici, e ogni altro indirizzo torna alla pagina
 // principale perche' la navigazione la gestisce l'app stessa.

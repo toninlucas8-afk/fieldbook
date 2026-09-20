@@ -45,6 +45,9 @@ export const api = {
   eliminaLavoro: (id) => elimina(`/lavori/${id}`),
 
   colleghi: () => get('/colleghi'),
+  eliminaFirma: (id) => elimina(`/firme/${id}`),
+  creaCondivisione: (lavoroId) => post(`/lavori/${lavoroId}/condivisioni`),
+  eliminaCondivisione: (id) => elimina(`/condivisioni/${id}`),
   chiaveAvvisi: () => get('/avvisi/chiave'),
   provaAvvisi: () => post('/avvisi/prova'),
   programmaLavoro: (id, { data_lavoro, ora_lavoro }) =>
@@ -142,6 +145,13 @@ export async function caricaDocumento (lavoroId, file) {
   return post(`/lavori/${lavoroId}/documenti`, {
     chiave: spazio.chiave, nome_file: file.name, tipo_mime: tipoMime, byte: file.size
   })
+}
+
+// La firma disegnata sullo schermo segue la stessa strada delle foto.
+export async function caricaFirma (lavoroId, immagine, dati) {
+  const spazio = await post(`/lavori/${lavoroId}/firma/spazio`)
+  await mettiSuR2(spazio.url_put, immagine, 'image/png')
+  return post(`/lavori/${lavoroId}/firma`, { chiave: spazio.chiave, ...dati })
 }
 
 /* ------------------------------------------------- aggiornamenti dal vivo */

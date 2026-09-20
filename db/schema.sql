@@ -154,3 +154,29 @@ create table iscrizioni_push (
   ultimo_invio timestamptz
 );
 create index on iscrizioni_push (utente_id);
+
+-- La firma che il cliente mette sullo schermo a fine montaggio.
+create table firme (
+  id           uuid primary key default gen_random_uuid(),
+  lavoro_id    uuid not null references lavori(id) on delete cascade,
+  chiave       text not null unique,          -- immagine della firma su R2
+  nome_cliente text,
+  nota         text,
+  raccolta_da  uuid references utenti(id) on delete set null,
+  firmata_il   timestamptz not null default now()
+);
+create index on firme (lavoro_id, firmata_il desc);
+
+-- Il link con foto e firma da mandare all'azienda committente, che non
+-- ha un account e non deve installare niente.
+create table condivisioni (
+  id        uuid primary key default gen_random_uuid(),
+  lavoro_id uuid not null references lavori(id) on delete cascade,
+  token     text not null unique,             -- sta nell'indirizzo del link
+  creata_da uuid references utenti(id) on delete set null,
+  creata_il timestamptz not null default now(),
+  scade_il  timestamptz not null,
+  aperture  int not null default 0,
+  ultima_apertura timestamptz
+);
+create index on condivisioni (lavoro_id, creata_il desc);

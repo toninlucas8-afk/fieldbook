@@ -59,6 +59,33 @@ const PASSI = [
       );
       create index if not exists iscrizioni_utente_idx on iscrizioni_push (utente_id);
     `
+  },
+  {
+    nome: 'firma del cliente e resoconto per l\'azienda',
+    sql: `
+      create table if not exists firme (
+        id           uuid primary key default gen_random_uuid(),
+        lavoro_id    uuid not null references lavori(id) on delete cascade,
+        chiave       text not null unique,
+        nome_cliente text,
+        nota         text,
+        raccolta_da  uuid references utenti(id) on delete set null,
+        firmata_il   timestamptz not null default now()
+      );
+      create index if not exists firme_lavoro_idx on firme (lavoro_id, firmata_il desc);
+
+      create table if not exists condivisioni (
+        id        uuid primary key default gen_random_uuid(),
+        lavoro_id uuid not null references lavori(id) on delete cascade,
+        token     text not null unique,
+        creata_da uuid references utenti(id) on delete set null,
+        creata_il timestamptz not null default now(),
+        scade_il  timestamptz not null,
+        aperture  int not null default 0,
+        ultima_apertura timestamptz
+      );
+      create index if not exists condivisioni_lavoro_idx on condivisioni (lavoro_id, creata_il desc);
+    `
   }
 ]
 

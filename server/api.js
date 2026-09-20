@@ -7,6 +7,7 @@ import { q, uno } from './db.js'
 import { apriFlusso, eventiDopo, pubblica } from './eventi.js'
 import { elimina, estensionePer, nuovaChiave, provaMagazzino, urlPerCaricare, urlPerVedere } from './r2.js'
 import { avvisa, chiavePubblica, disiscrivi, iscrivi, squadraDelLavoro } from './avvisi.js'
+import crypto from 'node:crypto'
 
 export const api = express.Router()
 
@@ -208,7 +209,7 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
   const lavoro = await uno(`${SELECT_LAVORO} where l.id = $1`, [req.params.id])
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
-  const [foto, documenti, annotazioni] = await Promise.all([
+  const [foto, documenti, annotazioni, firme, condivisioni] = await Promise.all([
     q(`select f.id, f.chiave, f.chiave_mini, f.didascalia, f.larghezza, f.altezza,
               f.byte, f.scattata_il, f.caricata_il, f.caricata_da, u.nome as caricata_da_nome
        from foto f left join utenti u on u.id = f.caricata_da
@@ -223,12 +224,21 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
        left join utenti u on u.id = a.creata_da
        left join utenti uc on uc.id = a.chiusa_da
        where a.lavoro_id = $1
-       order by a.fatta asc, a.creata_il desc`, [req.params.id])
+       order by a.fatta asc, a.creata_il desc`, [req.params.id]),
+    q(`select f.id, f.chiave, f.nome_cliente, f.nota, f.firmata_il, u.nome as raccolta_da_nome
+       from firme f left join utenti u on u.id = f.raccolta_da
+       where f.lavoro_id = $1 order by f.firmata_il desc`, [req.params.id]),
+    q(`select c.id, c.token, c.creata_il, c.scade_il, c.aperture, c.ultima_apertura
+       from condivisioni c
+       where c.lavoro_id = $1 and c.scade_il > now()
+       order by c.creata_il desc`, [req.params.id])
   ])
 
   res.json({
     ...lavoro,
     annotazioni,
+    condivisioni,
+    firme: await Promise.all(firme.map(async (f) => ({ ...f, url: await urlPerVedere(f.chiave) }))),
     foto: await Promise.all(foto.map(async (f) => ({
       ...f,
       url_mini: await urlPerVedere(f.chiave_mini || f.chiave),
@@ -479,6 +489,124 @@ api.delete('/foto/:id', richiediLogin, avvolgi(async (req, res) => {
   await pubblica('foto_eliminata', { lavoroId: foto.lavoro_id, utenteId: req.utente.id, payload: { id: foto.id } })
   res.json({ ok: true })
 }))
+
+/* ------------------------------------------------------------------ firma */
+
+// La firma e' un'immagine come le altre: il telefono la disegna e la
+// carica dritta su R2.
+api.post('/lavori/:id/firma/spazio', richiediLogin, avvolgi(async (req, res) => {
+  const lavoro = await uno('select id from lavori where id = $1', [req.params.id])
+  if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
+
+  const chiave = nuovaChiave('firme', lavoro.id, 'png')
+  res.json({ chiave, url_put: await urlPerCaricare(chiave, 'image/png') })
+}))
+
+api.post('/lavori/:id/firma', richiediLogin, avvolgi(async (req, res) => {
+  const chiave = testoPulito(req.body?.chiave, 300)
+  if (!chiave?.startsWith(`firme/${req.params.id}/`)) {
+    return res.status(400).json({ errore: 'Riferimento della firma non valido' })
+  }
+
+  const firma = await uno(
+    `insert into firme (lavoro_id, chiave, nome_cliente, nota, raccolta_da)
+     values ($1, $2, $3, $4, $5)
+     returning id, chiave, nome_cliente, nota, firmata_il`,
+    [req.params.id, chiave, testoPulito(req.body?.nome_cliente, 200),
+     testoPulito(req.body?.nota, 1000), req.utente.id]
+  )
+  await q('update lavori set aggiornato_il = now() where id = $1', [req.params.id])
+
+  const completa = { ...firma, raccolta_da_nome: req.utente.nome, url: await urlPerVedere(firma.chiave) }
+  await pubblica('firma_aggiunta', { lavoroId: req.params.id, utenteId: req.utente.id, payload: { id: firma.id } })
+  res.status(201).json(completa)
+}))
+
+api.delete('/firme/:id', richiediLogin, avvolgi(async (req, res) => {
+  const firma = await uno('select id, lavoro_id, chiave, raccolta_da from firme where id = $1', [req.params.id])
+  if (!firma) return res.status(404).json({ errore: 'Firma non trovata' })
+  if (req.utente.ruolo !== 'admin' && firma.raccolta_da !== req.utente.id) {
+    return res.status(403).json({ errore: 'Puoi cancellare solo le firme che hai raccolto tu' })
+  }
+
+  await q('delete from firme where id = $1', [firma.id])
+  await elimina(firma.chiave)
+  await pubblica('firma_eliminata', { lavoroId: firma.lavoro_id, utenteId: req.utente.id, payload: { id: firma.id } })
+  res.json({ ok: true })
+}))
+
+/* ------------------------------------------------ resoconto per l'azienda */
+
+const GIORNI_LINK = 60
+
+// Un link che l'azienda apre dal suo computer: niente account, niente app.
+api.post('/lavori/:id/condivisioni', richiediLogin, avvolgi(async (req, res) => {
+  const lavoro = await uno('select id, titolo from lavori where id = $1', [req.params.id])
+  if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
+
+  const condivisione = await uno(
+    `insert into condivisioni (lavoro_id, token, creata_da, scade_il)
+     values ($1, $2, $3, now() + ($4 || ' days')::interval)
+     returning id, token, creata_il, scade_il, aperture`,
+    [lavoro.id, crypto.randomBytes(24).toString('base64url'), req.utente.id, String(GIORNI_LINK)]
+  )
+  res.status(201).json(condivisione)
+}))
+
+api.delete('/condivisioni/:id', richiediLogin, avvolgi(async (req, res) => {
+  const tolta = await uno('delete from condivisioni where id = $1 returning id', [req.params.id])
+  if (!tolta) return res.status(404).json({ errore: 'Link non trovato' })
+  res.json({ ok: true })
+}))
+
+// Quello che vede chi apre il link. Non chiede il login, quindi qui
+// dentro non esce niente che non riguardi questo lavoro.
+export async function resocontoPubblico (token) {
+  const condivisione = await uno(
+    'select id, lavoro_id from condivisioni where token = $1 and scade_il > now()',
+    [String(token || '').slice(0, 200)]
+  )
+  if (!condivisione) return null
+
+  const lavoro = await uno(
+    `select l.titolo, l.cliente_nome, l.cliente_cognome, l.indirizzo, l.stato,
+            to_char(l.data_lavoro, 'YYYY-MM-DD') as data_lavoro,
+            to_char(l.ora_lavoro, 'HH24:MI') as ora_lavoro,
+            a.nome as azienda_nome
+     from lavori l left join aziende a on a.id = l.azienda_id
+     where l.id = $1`,
+    [condivisione.lavoro_id]
+  )
+  if (!lavoro) return null
+
+  const [foto, firme, daFare] = await Promise.all([
+    q(`select chiave, chiave_mini, didascalia from foto
+       where lavoro_id = $1 order by caricata_il asc limit 300`, [condivisione.lavoro_id]),
+    q(`select chiave, nome_cliente, nota, firmata_il from firme
+       where lavoro_id = $1 order by firmata_il desc limit 5`, [condivisione.lavoro_id]),
+    q(`select testo from annotazioni where lavoro_id = $1 and not fatta
+       order by creata_il asc limit 50`, [condivisione.lavoro_id])
+  ])
+
+  await q(
+    'update condivisioni set aperture = aperture + 1, ultima_apertura = now() where id = $1',
+    [condivisione.id]
+  )
+
+  return {
+    lavoro,
+    daFare: daFare.map((r) => r.testo),
+    foto: await Promise.all(foto.map(async (f) => ({
+      didascalia: f.didascalia,
+      mini: await urlPerVedere(f.chiave_mini || f.chiave),
+      piena: await urlPerVedere(f.chiave)
+    }))),
+    firme: await Promise.all(firme.map(async (f) => ({
+      nome_cliente: f.nome_cliente, nota: f.nota, firmata_il: f.firmata_il,
+      url: await urlPerVedere(f.chiave)
+    })))
+  }
+}
 
 /* -------------------------------------------------------------- documenti */
 

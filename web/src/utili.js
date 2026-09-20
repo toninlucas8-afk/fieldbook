@@ -52,6 +52,12 @@ const dataDa = (iso) => {
   return new Date(a, m - 1, g)
 }
 
+// Solo il giorno, senza ora: "19 novembre 2026".
+export function soloData (data) {
+  if (!data) return ''
+  return new Date(data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 // "Oggi", "Domani", "Ieri", altrimenti "lunedi' 22 settembre".
 export function etichettaGiorno (iso, { lungo = true } = {}) {
   if (!iso) return 'Senza data'

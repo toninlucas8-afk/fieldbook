@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, caricaDocumento, caricaFoto } from './api.js'
-import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando } from './utili.js'
+import Firma from './Firma.jsx'
+import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando, soloData } from './utili.js'
 
 export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [lavoro, setLavoro] = useState(null)
@@ -13,6 +14,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [salvoNota, setSalvoNota] = useState(false)
   const [scegliChi, setScegliChi] = useState(false)
   const [colleghi, setColleghi] = useState([])
+  const [faiFirmare, setFaiFirmare] = useState(false)
+  const [copiato, setCopiato] = useState(false)
 
   const inputFoto = useRef(null)
   const inputFotocamera = useRef(null)
@@ -133,6 +136,41 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     } catch (e) { setErrore(e.message) }
   }
 
+  async function eliminaFirma (firma) {
+    if (!confirm('Elimino la firma?')) return
+    try {
+      await api.eliminaFirma(firma.id)
+      ricarica()
+    } catch (e) { setErrore(e.message) }
+  }
+
+  async function creaLink () {
+    try {
+      await api.creaCondivisione(id)
+      await ricarica()
+    } catch (e) { setErrore(e.message) }
+  }
+
+  async function annullaLink (condivisione) {
+    if (!confirm('Annullo il link? Chi ce l\'ha non vedra\' piu\' niente.')) return
+    try {
+      await api.eliminaCondivisione(condivisione.id)
+      ricarica()
+    } catch (e) { setErrore(e.message) }
+  }
+
+  async function condividiLink (indirizzo) {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: lavoro.titolo, url: indirizzo })
+        return
+      }
+      await navigator.clipboard.writeText(indirizzo)
+      setCopiato(true)
+      setTimeout(() => setCopiato(false), 2200)
+    } catch { /* l'utente ha annullato la condivisione */ }
+  }
+
   async function eliminaLavoro () {
     if (!confirm('Elimino il lavoro con tutte le sue foto? Non si torna indietro.')) return
     await api.eliminaLavoro(id)
@@ -158,6 +196,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const daFare = note.filter((a) => !a.fatta).length
   const squadra = lavoro.assegnati || []
   const inSquadra = new Set(squadra.map((p) => p.id))
+  const firme = lavoro.firme || []
+  const link = (lavoro.condivisioni || [])[0]
 
   return (
     <>
@@ -337,6 +377,59 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
               </ul>
               )}
         </div>
+
+        <h2 className="titolo-sezione">Firma e consegna</h2>
+
+        <div className="carta">
+          {firme.length === 0
+            ? <p className="riga-vuota" style={{ marginBottom: 12 }}>
+                Nessuna firma. A fine montaggio falla mettere al cliente: resta qui e finisce
+                nel resoconto per l'azienda.
+              </p>
+            : firme.map((f) => (
+              <div key={f.id} className="firma-fatta">
+                <img src={f.url} alt={`Firma di ${f.nome_cliente || 'cliente'}`} />
+                <div className="sotto">
+                  <div>
+                    <strong>{f.nome_cliente || 'Cliente'}</strong>
+                    <small>{dataEstesa(f.firmata_il)}{f.raccolta_da_nome ? ` · raccolta da ${f.raccolta_da_nome}` : ''}</small>
+                    {f.nota && <small>{f.nota}</small>}
+                  </div>
+                  <button className="togli" onClick={() => eliminaFirma(f)} aria-label="Elimina la firma">✕</button>
+                </div>
+              </div>
+              ))}
+
+          <button className="bottone chiaro" onClick={() => setFaiFirmare(true)}>
+            ✍️ Fai firmare il cliente
+          </button>
+
+          <label className="titolo-campo">Link per l'azienda</label>
+          {link
+            ? (
+              <>
+                <div className="link-azienda">{`${location.origin}/r/${link.token}`}</div>
+                <div className="due">
+                  <button className="bottone chiaro piccolo" onClick={() => condividiLink(`${location.origin}/r/${link.token}`)}>
+                    {copiato ? 'Copiato' : 'Manda il link'}
+                  </button>
+                  <button className="bottone chiaro piccolo" onClick={() => annullaLink(link)}>Annulla il link</button>
+                </div>
+                <small style={{ display: 'block', marginTop: 8, color: 'var(--testo-tenue)' }}>
+                  Aperto {link.aperture} {link.aperture === 1 ? 'volta' : 'volte'}. Scade il {soloData(link.scade_il)}.
+                </small>
+              </>
+              )
+            : (
+              <>
+                <p className="riga-vuota">
+                  Un link con foto, firma e cose da sistemare, che l'azienda apre dal computer
+                  senza installare niente.
+                </p>
+                <button className="bottone chiaro" onClick={creaLink}>🔗 Crea il link</button>
+              </>
+              )}
+        </div>
       </div>
 
       <div className="barra-azione">
@@ -360,6 +453,14 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
           foto={aperta} utente={utente}
           chiudi={() => setAperta(null)}
           quandoCambia={() => { setAperta(null); ricarica() }}
+        />
+      )}
+
+      {faiFirmare && (
+        <Firma
+          lavoro={lavoro}
+          chiudi={() => setFaiFirmare(false)}
+          quandoSalvata={() => { setFaiFirmare(false); ricarica() }}
         />
       )}
 
