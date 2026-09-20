@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { api } from './api.js'
 import { creaAdminSeManca } from './auth.js'
 import { pulisciEventiVecchi } from './eventi.js'
+import { applicaMigrazioni } from './migrazioni.js'
 import { q } from './db.js'
 
 const qui = path.dirname(fileURLToPath(import.meta.url))
@@ -40,6 +41,7 @@ const porta = process.env.PORT || 3000
 
 try {
   await q('select 1')
+  await applicaMigrazioni()
   await creaAdminSeManca()
   pulisciEventiVecchi().catch(() => {})
   setInterval(() => pulisciEventiVecchi().catch(() => {}), 24 * 60 * 60 * 1000)

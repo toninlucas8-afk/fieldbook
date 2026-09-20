@@ -9,6 +9,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [aperta, setAperta] = useState(null)    // foto nel visore
   const [menu, setMenu] = useState(false)
   const [nuove, setNuove] = useState(() => new Set())
+  const [nota, setNota] = useState('')
+  const [salvoNota, setSalvoNota] = useState(false)
 
   const inputFoto = useRef(null)
   const inputFotocamera = useRef(null)
@@ -58,11 +60,54 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     } catch (e) { setErrore(e.message) }
   }
 
-  async function cambiaStato () {
-    const stato = lavoro.stato === 'in_corso' ? 'concluso' : 'in_corso'
-    setLavoro(await api.aggiornaLavoro(id, { stato }))
-    setMenu(false)
+  // Lo stato si cambia con un tocco e si vede subito: la conferma dal
+  // server arriva un attimo dopo.
+  async function impostaStato (stato) {
+    if (stato === lavoro.stato) return
+    setLavoro((l) => ({ ...l, stato }))
+    try {
+      await api.aggiornaLavoro(id, { stato })
+    } catch (e) { setErrore(e.message) }
     ricarica()
+  }
+
+  async function eliminaDocumento (doc) {
+    if (!confirm(`Elimino “${doc.nome_file}”?`)) return
+    try {
+      await api.eliminaDocumento(doc.id)
+      ricarica()
+    } catch (e) { setErrore(e.message) }
+  }
+
+  async function aggiungiNota (e) {
+    e.preventDefault()
+    const testo = nota.trim()
+    if (!testo || salvoNota) return
+    setSalvoNota(true)
+    try {
+      await api.creaAnnotazione(id, testo)
+      setNota('')
+      await ricarica()
+    } catch (err) { setErrore(err.message) } finally { setSalvoNota(false) }
+  }
+
+  async function segnaNota (a) {
+    setLavoro((l) => ({
+      ...l,
+      annotazioni: l.annotazioni.map((x) => (x.id === a.id ? { ...x, fatta: !a.fatta } : x))
+    }))
+    try {
+      await api.segnaAnnotazione(a.id, !a.fatta)
+    } catch (e) { setErrore(e.message) }
+    ricarica()
+  }
+
+  async function eliminaNota (a) {
+    if (!confirm('Elimino questa annotazione?')) return
+    try {
+      await api.eliminaAnnotazione(a.id)
+      ricarica()
+    } catch (e) { setErrore(e.message) }
   }
 
   async function eliminaLavoro () {
@@ -86,6 +131,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   }
 
   const cliente = nomeCliente(lavoro)
+  const note = lavoro.annotazioni || []
+  const daFare = note.filter((a) => !a.fatta).length
 
   return (
     <>
@@ -102,11 +149,19 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
         {errore && <div className="errore">{errore}</div>}
 
         <div className="carta">
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: cliente || lavoro.indirizzo ? 12 : 0 }}>
-            <span className={`etichetta ${lavoro.stato === 'in_corso' ? 'in-corso' : 'concluso'}`}>
-              {lavoro.stato === 'in_corso' ? 'In corso' : 'Concluso'}
-            </span>
-            <span className="etichetta">{lavoro.foto_totali} foto</span>
+          <div className="stato-scelta" role="group" aria-label="Stato del lavoro">
+            <button aria-pressed={lavoro.stato === 'in_corso'} onClick={() => impostaStato('in_corso')}>
+              In corso
+            </button>
+            <button aria-pressed={lavoro.stato === 'concluso'} onClick={() => impostaStato('concluso')}>
+              Concluso
+            </button>
+          </div>
+
+          <div className="riga-etichette">
+            {lavoro.foto.length > 0 && <span className="etichetta">{lavoro.foto.length} 📷</span>}
+            {lavoro.documenti.length > 0 && <span className="etichetta">{lavoro.documenti.length} 📄</span>}
+            {daFare > 0 && <span className="etichetta attenzione">{daFare} da fare</span>}
           </div>
 
           {cliente && <div style={{ fontWeight: 600, marginBottom: 4 }}>{cliente}</div>}
@@ -146,10 +201,10 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
           </div>
         )}
 
-        <h2 style={{ fontSize: 16, margin: '18px 0 10px' }}>Foto</h2>
+        <h2 className="titolo-sezione">Foto</h2>
 
         {lavoro.foto.length === 0
-          ? <div className="vuoto">Ancora nessuna foto. Scattane una qui sotto.</div>
+          ? <p className="riga-vuota">Ancora nessuna foto. Scattane una con i bottoni qui sotto.</p>
           : (
             <div className="griglia-foto">
               {lavoro.foto.map((f) => (
@@ -160,29 +215,71 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
             </div>
             )}
 
-        {lavoro.documenti.length > 0 && (
-          <>
-            <h2 style={{ fontSize: 16, margin: '22px 0 10px' }}>Documenti</h2>
-            {lavoro.documenti.map((d) => (
-              <div className="carta" key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>📄</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {d.nome_file}
-                  </div>
-                  <small style={{ color: 'var(--testo-tenue)' }}>
-                    {peso(d.byte)} · {d.caricato_da_nome} · {quando(d.caricato_il)}
-                  </small>
-                </div>
-                <a className="bottone chiaro piccolo" href={d.url} target="_blank" rel="noreferrer">Apri</a>
-              </div>
-            ))}
-          </>
-        )}
+        <h2 className="titolo-sezione">Documenti</h2>
 
-        <button className="bottone chiaro" style={{ marginTop: 16 }} onClick={() => inputDoc.current.click()}>
+        {lavoro.documenti.length === 0 && <p className="riga-vuota">Nessun documento allegato.</p>}
+
+        {lavoro.documenti.map((d) => (
+          <div className="carta" key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 24 }}>📄</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {d.nome_file}
+              </div>
+              <small style={{ color: 'var(--testo-tenue)' }}>
+                {peso(d.byte)} · {d.caricato_da_nome} · {quando(d.caricato_il)}
+              </small>
+            </div>
+            <a className="bottone chiaro piccolo" href={d.url} target="_blank" rel="noreferrer">Apri</a>
+            {(utente.ruolo === 'admin' || d.caricato_da === utente.id) && (
+              <button className="togli" onClick={() => eliminaDocumento(d)} aria-label={`Elimina ${d.nome_file}`}>✕</button>
+            )}
+          </div>
+        ))}
+
+        <button className="bottone chiaro" onClick={() => inputDoc.current.click()}>
           📄 Aggiungi un documento
         </button>
+
+        <h2 className="titolo-sezione">Annotazioni</h2>
+
+        <div className="carta">
+          <form className="nuova-nota" onSubmit={aggiungiNota}>
+            <input
+              value={nota} onChange={(e) => setNota(e.target.value)} maxLength={1000}
+              placeholder="Manca una maniglia, da ordinare…"
+            />
+            <button className="bottone arancio piccolo" type="submit" disabled={!nota.trim() || salvoNota}>
+              Aggiungi
+            </button>
+          </form>
+
+          {note.length === 0
+            ? <p className="riga-vuota" style={{ margin: '14px 0 2px' }}>
+                Qui segni quello che manca o che va ordinato dopo. Lo vedono tutti.
+              </p>
+            : (
+              <ul className="note">
+                {note.map((a) => (
+                  <li key={a.id} className={a.fatta ? 'fatta' : ''}>
+                    <button className="spunta" onClick={() => segnaNota(a)} aria-pressed={a.fatta}
+                      aria-label={a.fatta ? 'Rimetti da fare' : 'Segna come fatta'}>
+                      {a.fatta ? '✓' : ''}
+                    </button>
+                    <div className="corpo">
+                      <span>{a.testo}</span>
+                      <small>
+                        {a.fatta
+                          ? `Fatta da ${a.chiusa_da_nome || 'qualcuno'} · ${quando(a.chiusa_il)}`
+                          : `${a.creata_da_nome || 'qualcuno'} · ${quando(a.creata_il)}`}
+                      </small>
+                    </div>
+                    <button className="togli" onClick={() => eliminaNota(a)} aria-label="Elimina annotazione">✕</button>
+                  </li>
+                ))}
+              </ul>
+              )}
+        </div>
       </div>
 
       <div className="barra-azione">
@@ -213,10 +310,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
         <div className="foglio-sfondo" onClick={() => setMenu(false)}>
           <div className="foglio" onClick={(e) => e.stopPropagation()}>
             <h2>{lavoro.titolo}</h2>
-            <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={cambiaStato}>
-              {lavoro.stato === 'in_corso' ? '✓ Segna come concluso' : '↩ Rimetti in corso'}
-            </button>
-            <p style={{ fontSize: 13, color: 'var(--testo-tenue)' }}>
+            <p style={{ fontSize: 13, color: 'var(--testo-tenue)', marginTop: 0 }}>
               Creato da {lavoro.creato_da_nome || 'qualcuno'} il {dataEstesa(lavoro.creato_il)}
             </p>
             {utente.ruolo === 'admin' && (

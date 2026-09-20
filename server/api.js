@@ -10,7 +10,7 @@ import { elimina, estensionePer, nuovaChiave, provaMagazzino, urlPerCaricare, ur
 export const api = express.Router()
 
 const avvolgi = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
-const testo = (v, max = 500) => {
+const testoPulito = (v, max = 500) => {
   const s = String(v ?? '').trim()
   return s ? s.slice(0, max) : null
 }
@@ -74,13 +74,13 @@ api.get('/aziende', richiediLogin, avvolgi(async (req, res) => {
 }))
 
 api.post('/aziende', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
-  const nome = testo(req.body?.nome, 120)
+  const nome = testoPulito(req.body?.nome, 120)
   if (!nome) return res.status(400).json({ errore: 'Serve il nome dell\'azienda' })
   const esiste = await uno('select id from aziende where lower(nome) = lower($1)', [nome])
   if (esiste) return res.status(409).json({ errore: 'Questa azienda c\'e\' gia\'' })
   const azienda = await uno(
     'insert into aziende (nome, colore) values ($1, $2) returning id, nome, colore, attiva',
-    [nome, testo(req.body?.colore, 20)]
+    [nome, testoPulito(req.body?.colore, 20)]
   )
   res.status(201).json(azienda)
 }))
@@ -92,7 +92,7 @@ api.patch('/aziende/:id', richiediLogin, richiediAdmin, avvolgi(async (req, res)
        colore = coalesce($3, colore),
        attiva = coalesce($4, attiva)
      where id = $1 returning id, nome, colore, attiva`,
-    [req.params.id, testo(req.body?.nome, 120), testo(req.body?.colore, 20),
+    [req.params.id, testoPulito(req.body?.nome, 120), testoPulito(req.body?.colore, 20),
      typeof req.body?.attiva === 'boolean' ? req.body.attiva : null]
   )
   if (!azienda) return res.status(404).json({ errore: 'Azienda non trovata' })
@@ -108,16 +108,18 @@ const SELECT_LAVORO = `
          u.nome as creato_da_nome,
          (select count(*) from foto f where f.lavoro_id = l.id)::int as foto_totali,
          (select count(*) from documenti d where d.lavoro_id = l.id)::int as documenti_totali,
-         (select f.chiave_mini from foto f
-           where f.lavoro_id = l.id and f.chiave_mini is not null
-           order by f.caricata_il desc limit 1) as copertina_chiave
+         (select coalesce(f.chiave_mini, f.chiave) from foto f
+           where f.lavoro_id = l.id
+           order by f.caricata_il desc limit 1) as copertina_chiave,
+         (select count(*) from annotazioni an
+           where an.lavoro_id = l.id and not an.fatta)::int as annotazioni_aperte
   from lavori l
   left join aziende a on a.id = l.azienda_id
   left join utenti u on u.id = l.creato_da`
 
 api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
   const stato = ['in_corso', 'concluso'].includes(req.query.stato) ? req.query.stato : null
-  const cerca = testo(req.query.q, 100)
+  const cerca = testoPulito(req.query.q, 100)
 
   const righe = await q(
     `${SELECT_LAVORO}
@@ -137,16 +139,16 @@ api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
 }))
 
 api.post('/lavori', richiediLogin, avvolgi(async (req, res) => {
-  const titolo = testo(req.body?.titolo, 200)
+  const titolo = testoPulito(req.body?.titolo, 200)
   if (!titolo) return res.status(400).json({ errore: 'Serve il titolo del lavoro' })
 
   const lavoro = await uno(
     `insert into lavori (titolo, azienda_id, cliente_nome, cliente_cognome,
                          cliente_telefono, indirizzo, note, creato_da)
      values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-    [titolo, testo(req.body?.azienda_id, 40), testo(req.body?.cliente_nome, 100),
-     testo(req.body?.cliente_cognome, 100), testo(req.body?.cliente_telefono, 40),
-     testo(req.body?.indirizzo, 300), testo(req.body?.note, 4000), req.utente.id]
+    [titolo, testoPulito(req.body?.azienda_id, 40), testoPulito(req.body?.cliente_nome, 100),
+     testoPulito(req.body?.cliente_cognome, 100), testoPulito(req.body?.cliente_telefono, 40),
+     testoPulito(req.body?.indirizzo, 300), testoPulito(req.body?.note, 4000), req.utente.id]
   )
 
   await pubblica('lavoro_creato', { lavoroId: lavoro.id, utenteId: req.utente.id, payload: { titolo } })
@@ -157,19 +159,27 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
   const lavoro = await uno(`${SELECT_LAVORO} where l.id = $1`, [req.params.id])
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
-  const [foto, documenti] = await Promise.all([
+  const [foto, documenti, annotazioni] = await Promise.all([
     q(`select f.id, f.chiave, f.chiave_mini, f.didascalia, f.larghezza, f.altezza,
               f.byte, f.scattata_il, f.caricata_il, f.caricata_da, u.nome as caricata_da_nome
        from foto f left join utenti u on u.id = f.caricata_da
        where f.lavoro_id = $1 order by f.caricata_il desc`, [req.params.id]),
     q(`select d.id, d.chiave, d.nome_file, d.tipo_mime, d.byte, d.caricato_il,
-              u.nome as caricato_da_nome
+              d.caricato_da, u.nome as caricato_da_nome
        from documenti d left join utenti u on u.id = d.caricato_da
-       where d.lavoro_id = $1 order by d.caricato_il desc`, [req.params.id])
+       where d.lavoro_id = $1 order by d.caricato_il desc`, [req.params.id]),
+    q(`select a.id, a.testo, a.fatta, a.creata_il, a.chiusa_il, a.creata_da,
+              u.nome as creata_da_nome, uc.nome as chiusa_da_nome
+       from annotazioni a
+       left join utenti u on u.id = a.creata_da
+       left join utenti uc on uc.id = a.chiusa_da
+       where a.lavoro_id = $1
+       order by a.fatta asc, a.creata_il desc`, [req.params.id])
   ])
 
   res.json({
     ...lavoro,
+    annotazioni,
     foto: await Promise.all(foto.map(async (f) => ({
       ...f,
       url_mini: await urlPerVedere(f.chiave_mini || f.chiave),
@@ -197,10 +207,10 @@ api.patch('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
                           when $9 = 'in_corso' then null else concluso_il end,
        aggiornato_il = now()
      where id = $1 returning id, stato`,
-    [req.params.id, testo(req.body?.titolo, 200), testo(req.body?.azienda_id, 40),
-     testo(req.body?.cliente_nome, 100), testo(req.body?.cliente_cognome, 100),
-     testo(req.body?.cliente_telefono, 40), testo(req.body?.indirizzo, 300),
-     testo(req.body?.note, 4000), stato]
+    [req.params.id, testoPulito(req.body?.titolo, 200), testoPulito(req.body?.azienda_id, 40),
+     testoPulito(req.body?.cliente_nome, 100), testoPulito(req.body?.cliente_cognome, 100),
+     testoPulito(req.body?.cliente_telefono, 40), testoPulito(req.body?.indirizzo, 300),
+     testoPulito(req.body?.note, 4000), stato]
   )
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
@@ -229,7 +239,7 @@ api.post('/lavori/:id/foto/spazio', richiediLogin, avvolgi(async (req, res) => {
   const lavoro = await uno('select id from lavori where id = $1', [req.params.id])
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
-  const tipoMime = testo(req.body?.tipo_mime, 100) || 'image/jpeg'
+  const tipoMime = testoPulito(req.body?.tipo_mime, 100) || 'image/jpeg'
   if (!tipoMime.startsWith('image/')) return res.status(400).json({ errore: 'Si caricano solo immagini' })
 
   const chiave = nuovaChiave('foto', lavoro.id, estensionePer(tipoMime))
@@ -244,7 +254,7 @@ api.post('/lavori/:id/foto/spazio', richiediLogin, avvolgi(async (req, res) => {
 }))
 
 api.post('/lavori/:id/foto', richiediLogin, avvolgi(async (req, res) => {
-  const chiave = testo(req.body?.chiave, 300)
+  const chiave = testoPulito(req.body?.chiave, 300)
   if (!chiave) return res.status(400).json({ errore: 'Manca il riferimento del file' })
   if (!chiave.startsWith(`foto/${req.params.id}/`)) {
     return res.status(400).json({ errore: 'Riferimento del file non valido' })
@@ -255,7 +265,7 @@ api.post('/lavori/:id/foto', richiediLogin, avvolgi(async (req, res) => {
                        altezza, byte, scattata_il, caricata_da)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning id, chiave, chiave_mini, didascalia, larghezza, altezza, byte, caricata_il`,
-    [req.params.id, chiave, testo(req.body?.chiave_mini, 300), testo(req.body?.didascalia, 500),
+    [req.params.id, chiave, testoPulito(req.body?.chiave_mini, 300), testoPulito(req.body?.didascalia, 500),
      Number(req.body?.larghezza) || null, Number(req.body?.altezza) || null,
      Number(req.body?.byte) || null, req.body?.scattata_il || null, req.utente.id]
   )
@@ -276,7 +286,7 @@ api.post('/lavori/:id/foto', richiediLogin, avvolgi(async (req, res) => {
 api.patch('/foto/:id', richiediLogin, avvolgi(async (req, res) => {
   const foto = await uno(
     'update foto set didascalia = $2 where id = $1 returning id, lavoro_id, didascalia',
-    [req.params.id, testo(req.body?.didascalia, 500)]
+    [req.params.id, testoPulito(req.body?.didascalia, 500)]
   )
   if (!foto) return res.status(404).json({ errore: 'Foto non trovata' })
   await pubblica('foto_aggiornata', { lavoroId: foto.lavoro_id, utenteId: req.utente.id, payload: foto })
@@ -304,15 +314,15 @@ api.post('/lavori/:id/documenti/spazio', richiediLogin, avvolgi(async (req, res)
   const lavoro = await uno('select id from lavori where id = $1', [req.params.id])
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
-  const nomeFile = testo(req.body?.nome_file, 200) || 'documento'
-  const tipoMime = testo(req.body?.tipo_mime, 100) || 'application/octet-stream'
+  const nomeFile = testoPulito(req.body?.nome_file, 200) || 'documento'
+  const tipoMime = testoPulito(req.body?.tipo_mime, 100) || 'application/octet-stream'
   const chiave = nuovaChiave('documenti', lavoro.id, estensionePer(tipoMime, nomeFile))
 
   res.json({ chiave, url_put: await urlPerCaricare(chiave, tipoMime) })
 }))
 
 api.post('/lavori/:id/documenti', richiediLogin, avvolgi(async (req, res) => {
-  const chiave = testo(req.body?.chiave, 300)
+  const chiave = testoPulito(req.body?.chiave, 300)
   if (!chiave?.startsWith(`documenti/${req.params.id}/`)) {
     return res.status(400).json({ errore: 'Riferimento del file non valido' })
   }
@@ -321,8 +331,8 @@ api.post('/lavori/:id/documenti', richiediLogin, avvolgi(async (req, res) => {
     `insert into documenti (lavoro_id, chiave, nome_file, tipo_mime, byte, caricato_da)
      values ($1, $2, $3, $4, $5, $6)
      returning id, chiave, nome_file, tipo_mime, byte, caricato_il`,
-    [req.params.id, chiave, testo(req.body?.nome_file, 200) || 'documento',
-     testo(req.body?.tipo_mime, 100), Number(req.body?.byte) || null, req.utente.id]
+    [req.params.id, chiave, testoPulito(req.body?.nome_file, 200) || 'documento',
+     testoPulito(req.body?.tipo_mime, 100), Number(req.body?.byte) || null, req.utente.id]
   )
   await q('update lavori set aggiornato_il = now() where id = $1', [req.params.id])
 
@@ -348,6 +358,56 @@ api.delete('/documenti/:id', richiediLogin, avvolgi(async (req, res) => {
   res.json({ ok: true })
 }))
 
+/* ------------------------------------------------------------ annotazioni */
+
+// Cose mancanti, pezzi da ordinare, promemoria per chi passa dopo.
+api.post('/lavori/:id/annotazioni', richiediLogin, avvolgi(async (req, res) => {
+  const testo = testoPulito(req.body?.testo, 1000)
+  if (!testo) return res.status(400).json({ errore: 'Scrivi che cosa serve' })
+
+  const lavoro = await uno('select id from lavori where id = $1', [req.params.id])
+  if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
+
+  const nota = await uno(
+    `insert into annotazioni (lavoro_id, testo, creata_da)
+     values ($1, $2, $3)
+     returning id, testo, fatta, creata_il`,
+    [req.params.id, testo, req.utente.id]
+  )
+  await q('update lavori set aggiornato_il = now() where id = $1', [req.params.id])
+
+  const completa = { ...nota, creata_da_nome: req.utente.nome }
+  await pubblica('annotazione_aggiunta', { lavoroId: req.params.id, utenteId: req.utente.id, payload: completa })
+  res.status(201).json(completa)
+}))
+
+api.patch('/annotazioni/:id', richiediLogin, avvolgi(async (req, res) => {
+  const fatta = typeof req.body?.fatta === 'boolean' ? req.body.fatta : null
+
+  const nota = await uno(
+    `update annotazioni set
+       testo = coalesce($2, testo),
+       fatta = coalesce($3, fatta),
+       chiusa_da = case when $3 = true then $4 when $3 = false then null else chiusa_da end,
+       chiusa_il = case when $3 = true then now() when $3 = false then null else chiusa_il end
+     where id = $1
+     returning id, lavoro_id, testo, fatta, chiusa_il`,
+    [req.params.id, testoPulito(req.body?.testo, 1000), fatta, req.utente.id]
+  )
+  if (!nota) return res.status(404).json({ errore: 'Annotazione non trovata' })
+
+  await pubblica('annotazione_aggiornata', { lavoroId: nota.lavoro_id, utenteId: req.utente.id, payload: nota })
+  res.json(nota)
+}))
+
+api.delete('/annotazioni/:id', richiediLogin, avvolgi(async (req, res) => {
+  const nota = await uno('delete from annotazioni where id = $1 returning id, lavoro_id', [req.params.id])
+  if (!nota) return res.status(404).json({ errore: 'Annotazione non trovata' })
+
+  await pubblica('annotazione_eliminata', { lavoroId: nota.lavoro_id, utenteId: req.utente.id, payload: { id: nota.id } })
+  res.json({ ok: true })
+}))
+
 /* ---------------------------------------------------------------- squadra */
 
 api.get('/squadra', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
@@ -361,7 +421,7 @@ api.get('/squadra', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
 
 // Il PIN si vede una volta sola, qui: dopo resta solo cifrato nel database.
 api.post('/squadra', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
-  const pin = testo(req.body?.pin, 8) || generaPin()
+  const pin = testoPulito(req.body?.pin, 8) || generaPin()
   const utente = await creaUtente({ nome: req.body?.nome, pin, ruolo: req.body?.ruolo === 'admin' ? 'admin' : 'montatore' })
   res.status(201).json({ ...utente, pin })
 }))
@@ -370,7 +430,7 @@ api.post('/squadra/:id/pin', richiediLogin, richiediAdmin, avvolgi(async (req, r
   const utente = await uno('select id, nome from utenti where id = $1', [req.params.id])
   if (!utente) return res.status(404).json({ errore: 'Persona non trovata' })
 
-  const pin = testo(req.body?.pin, 8) || generaPin()
+  const pin = testoPulito(req.body?.pin, 8) || generaPin()
   await cambiaPin(utente.id, pin)
   res.json({ ...utente, pin, avviso: 'PIN nuovo. I telefoni collegati prima devono rientrare.' })
 }))

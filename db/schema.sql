@@ -106,3 +106,17 @@ create table eventi (
 );
 create index on eventi (id desc);
 create index on eventi (lavoro_id, id desc);
+
+-- Annotazioni del lavoro: cose mancanti, pezzi da ordinare, promemoria.
+-- Chiunque puo' aggiungerne e spuntarle quando sono risolte.
+create table annotazioni (
+  id            uuid primary key default gen_random_uuid(),
+  lavoro_id     uuid not null references lavori(id) on delete cascade,
+  testo         text not null,
+  fatta         boolean not null default false,
+  creata_da     uuid references utenti(id) on delete set null,
+  creata_il     timestamptz not null default now(),
+  chiusa_da     uuid references utenti(id) on delete set null,
+  chiusa_il     timestamptz
+);
+create index on annotazioni (lavoro_id, fatta, creata_il desc);

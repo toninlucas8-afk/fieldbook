@@ -9,6 +9,7 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
   const [caricando, setCaricando] = useState(true)
   const [errore, setErrore] = useState('')
   const [menu, setMenu] = useState(false)
+  const [senzaCopertina, setSenzaCopertina] = useState(() => new Set())
 
   useEffect(() => {
     let vivo = true
@@ -69,8 +70,11 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
               )
             : lavori.map((l) => (
               <button key={l.id} className="carta lavoro-riga" onClick={() => apriLavoro(l.id)}>
-                {l.copertina_url
-                  ? <img className="copertina" src={l.copertina_url} alt="" loading="lazy" />
+                {l.copertina_url && !senzaCopertina.has(l.id)
+                  ? <img
+                      className="copertina" src={l.copertina_url} alt="" loading="lazy"
+                      onError={() => setSenzaCopertina((s) => new Set(s).add(l.id))}
+                    />
                   : <div className="copertina">📷</div>}
 
                 <div className="corpo">
@@ -90,6 +94,9 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
                     </span>
                     <span className="etichetta">{l.foto_totali} 📷</span>
                     {l.documenti_totali > 0 && <span className="etichetta">{l.documenti_totali} 📄</span>}
+                    {l.annotazioni_aperte > 0 && (
+                      <span className="etichetta attenzione">{l.annotazioni_aperte} da fare</span>
+                    )}
                     <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--testo-tenue)' }}>
                       {quando(l.aggiornato_il)}
                     </span>

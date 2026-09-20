@@ -45,6 +45,10 @@ export const api = {
   eliminaFoto: (id) => elimina(`/foto/${id}`),
   eliminaDocumento: (id) => elimina(`/documenti/${id}`),
 
+  creaAnnotazione: (lavoroId, testo) => post(`/lavori/${lavoroId}/annotazioni`, { testo }),
+  segnaAnnotazione: (id, fatta) => patch(`/annotazioni/${id}`, { fatta }),
+  eliminaAnnotazione: (id) => elimina(`/annotazioni/${id}`),
+
   squadra: () => get('/squadra'),
   creaPersona: (dati) => post('/squadra', dati),
   nuovoPin: (id, pin) => post(`/squadra/${id}/pin`, { pin }),
