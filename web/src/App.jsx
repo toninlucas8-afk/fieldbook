@@ -9,8 +9,18 @@ import Squadra from './Squadra.jsx'
 export default function App () {
   const [utente, setUtente] = useState(null)
   const [controllato, setControllato] = useState(false)
-  const [schermata, setSchermata] = useState({ nome: 'lavori' })
+  // Toccando un avviso il telefono apre /?lavoro=<id>: si va dritti li'.
+  const [schermata, setSchermata] = useState(() => {
+    const id = new URLSearchParams(location.search).get('lavoro')
+    return id ? { nome: 'lavoro', id } : { nome: 'lavori' }
+  })
   const [segnale, setSegnale] = useState(null)
+
+  // Ripulisce l'indirizzo dopo essere arrivati da un avviso, cosi' un
+  // aggiornamento della pagina non riapre sempre lo stesso lavoro.
+  useEffect(() => {
+    if (location.search) history.replaceState({}, '', location.pathname)
+  }, [])
 
   // Il telefono resta riconosciuto: si riparte da dov'eravamo.
   useEffect(() => {

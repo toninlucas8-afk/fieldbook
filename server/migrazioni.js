@@ -37,6 +37,28 @@ const PASSI = [
       );
       create index if not exists assegnazioni_utente_idx on assegnazioni (utente_id);
     `
+  },
+  {
+    nome: 'avvisi sul telefono',
+    sql: `
+      create table if not exists impostazioni (
+        chiave        text primary key,
+        valore        jsonb not null,
+        aggiornata_il timestamptz not null default now()
+      );
+
+      create table if not exists iscrizioni_push (
+        id          uuid primary key default gen_random_uuid(),
+        utente_id   uuid not null references utenti(id) on delete cascade,
+        endpoint    text not null unique,
+        p256dh      text not null,
+        auth        text not null,
+        dispositivo text,
+        creata_il   timestamptz not null default now(),
+        ultimo_invio timestamptz
+      );
+      create index if not exists iscrizioni_utente_idx on iscrizioni_push (utente_id);
+    `
   }
 ]
 

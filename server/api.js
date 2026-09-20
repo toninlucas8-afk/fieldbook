@@ -6,6 +6,7 @@ import {
 import { q, uno } from './db.js'
 import { apriFlusso, eventiDopo, pubblica } from './eventi.js'
 import { elimina, estensionePer, nuovaChiave, provaMagazzino, urlPerCaricare, urlPerVedere } from './r2.js'
+import { avvisa, chiavePubblica, disiscrivi, iscrivi, squadraDelLavoro } from './avvisi.js'
 
 export const api = express.Router()
 
@@ -130,6 +131,16 @@ const ora = (v) => (ORA.test(String(v || '')) ? v : null)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const idValido = (v) => (UUID.test(String(v || '')) ? String(v) : null)
 
+// "giovedi' 25 settembre alle 8:30", per il testo degli avvisi.
+const quandoInItaliano = (data, oraDelGiorno) => {
+  if (!data) return 'senza data'
+  const [anno, mese, gg] = data.split('-').map(Number)
+  const testo = new Date(anno, mese - 1, gg).toLocaleDateString('it-IT', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  })
+  return oraDelGiorno ? `${testo} alle ${oraDelGiorno}` : testo
+}
+
 api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
   const stato = ['in_corso', 'concluso'].includes(req.query.stato) ? req.query.stato : null
   const cerca = testoPulito(req.query.q, 100)
@@ -253,7 +264,19 @@ api.patch('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
   await pubblica('lavoro_aggiornato', { lavoroId: lavoro.id, utenteId: req.utente.id, payload: { stato: lavoro.stato } })
-  res.json(await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id]))
+
+  const dopo = await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id])
+  if (stato === 'concluso') {
+    squadraDelLavoro(lavoro.id, req.utente.id)
+      .then((chi) => avvisa(chi, {
+        titolo: dopo.titolo,
+        testo: `${req.utente.nome} ha segnato il lavoro come concluso.`,
+        lavoroId: lavoro.id
+      }))
+      .catch(() => {})
+  }
+
+  res.json(dopo)
 }))
 
 api.delete('/lavori/:id', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
@@ -268,6 +291,30 @@ api.delete('/lavori/:id', richiediLogin, richiediAdmin, avvolgi(async (req, res)
   for (const r of chiavi) { await elimina(r.chiave); await elimina(r.chiave_mini) }
   await pubblica('lavoro_eliminato', { utenteId: req.utente.id, payload: { id: req.params.id } })
   res.json({ ok: true })
+}))
+
+/* ----------------------------------------------------------------- avvisi */
+
+api.get('/avvisi/chiave', richiediLogin, (req, res) => res.json({ chiave: chiavePubblica() }))
+
+api.post('/avvisi/iscrivi', richiediLogin, avvolgi(async (req, res) => {
+  const fatto = await iscrivi(req.utente.id, req.body, req.get('user-agent'))
+  if (!fatto) return res.status(400).json({ errore: 'Iscrizione agli avvisi non valida' })
+  res.status(201).json({ ok: true })
+}))
+
+api.post('/avvisi/disiscrivi', richiediLogin, avvolgi(async (req, res) => {
+  const endpoint = testoPulito(req.body?.endpoint, 1000)
+  if (endpoint) await disiscrivi(endpoint)
+  res.json({ ok: true })
+}))
+
+// Serve a chi accende gli avvisi per vedere subito che arrivano davvero.
+api.post('/avvisi/prova', richiediLogin, avvolgi(async (req, res) => {
+  const esito = await avvisa([req.utente.id], {
+    titolo: 'Fieldbook', testo: 'Gli avvisi su questo telefono funzionano.', tag: 'prova'
+  })
+  res.json(esito)
 }))
 
 /* ----------------------------------------------------------------- agenda */
@@ -297,7 +344,19 @@ api.put('/lavori/:id/programma', richiediLogin, avvolgi(async (req, res) => {
     lavoroId: lavoro.id, utenteId: req.utente.id,
     payload: { data_lavoro: data, ora_lavoro: oraDelGiorno }
   })
-  res.json(await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id]))
+
+  const aggiornato = await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id])
+  squadraDelLavoro(lavoro.id, req.utente.id)
+    .then((chi) => avvisa(chi, {
+      titolo: aggiornato.titolo,
+      testo: data
+        ? `Spostato a ${quandoInItaliano(data, oraDelGiorno)}.`
+        : 'Tolto dall\'agenda: per ora non ha piu\' un giorno.',
+      lavoroId: lavoro.id
+    }))
+    .catch(() => {})
+
+  res.json(aggiornato)
 }))
 
 api.post('/lavori/:id/squadra', richiediLogin, avvolgi(async (req, res) => {
@@ -318,6 +377,19 @@ api.post('/lavori/:id/squadra', richiediLogin, avvolgi(async (req, res) => {
     lavoroId: lavoro.id, utenteId: req.utente.id,
     payload: { aggiunta: persona, titolo: lavoro.titolo }
   })
+
+  if (persona.id !== req.utente.id) {
+    const quando = await uno(
+      "select to_char(data_lavoro, 'YYYY-MM-DD') as d, to_char(ora_lavoro, 'HH24:MI') as o from lavori where id = $1",
+      [lavoro.id]
+    )
+    avvisa([persona.id], {
+      titolo: lavoro.titolo,
+      testo: `${req.utente.nome} ti ha messo su questo lavoro: ${quandoInItaliano(quando?.d, quando?.o)}.`,
+      lavoroId: lavoro.id
+    }).catch(() => {})
+  }
+
   res.status(201).json(persona)
 }))
 
@@ -478,6 +550,16 @@ api.post('/lavori/:id/annotazioni', richiediLogin, avvolgi(async (req, res) => {
 
   const completa = { ...nota, creata_da_nome: req.utente.nome }
   await pubblica('annotazione_aggiunta', { lavoroId: req.params.id, utenteId: req.utente.id, payload: completa })
+
+  const titoloLavoro = (await uno('select titolo from lavori where id = $1', [req.params.id]))?.titolo
+  squadraDelLavoro(req.params.id, req.utente.id)
+    .then((chi) => avvisa(chi, {
+      titolo: titoloLavoro,
+      testo: `${req.utente.nome} ha segnato: ${testo}`,
+      lavoroId: req.params.id
+    }))
+    .catch(() => {})
+
   res.status(201).json(completa)
 }))
 
@@ -546,8 +628,13 @@ api.post('/squadra/:id/attivo', richiediLogin, richiediAdmin, avvolgi(async (req
     [req.params.id, attivo]
   )
   if (!utente) return res.status(404).json({ errore: 'Persona non trovata' })
-  // Revocare l'accesso deve avere effetto subito, non al prossimo giro.
-  if (!attivo) await q('delete from sessioni where utente_id = $1', [utente.id])
+  // Revocare l'accesso deve avere effetto subito, non al prossimo giro:
+  // via i telefoni collegati e via anche gli avvisi, che altrimenti
+  // continuerebbero ad arrivare a chi non fa piu' parte della squadra.
+  if (!attivo) {
+    await q('delete from sessioni where utente_id = $1', [utente.id])
+    await q('delete from iscrizioni_push where utente_id = $1', [utente.id])
+  }
   res.json(utente)
 }))
 

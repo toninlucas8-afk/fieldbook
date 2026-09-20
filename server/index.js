@@ -6,6 +6,7 @@ import { api } from './api.js'
 import { creaAdminSeManca } from './auth.js'
 import { pulisciEventiVecchi } from './eventi.js'
 import { applicaMigrazioni } from './migrazioni.js'
+import { preparaAvvisi } from './avvisi.js'
 import { q } from './db.js'
 
 const qui = path.dirname(fileURLToPath(import.meta.url))
@@ -43,6 +44,7 @@ try {
   await q('select 1')
   await applicaMigrazioni()
   await creaAdminSeManca()
+  await preparaAvvisi()
   pulisciEventiVecchi().catch(() => {})
   setInterval(() => pulisciEventiVecchi().catch(() => {}), 24 * 60 * 60 * 1000)
 } catch (e) {

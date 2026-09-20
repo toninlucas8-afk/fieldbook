@@ -1,6 +1,6 @@
 // Service worker minimo: serve a rendere Fieldbook installabile sul telefono
 // e a farla aprire anche quando la linea e' pessima.
-const CACHE = 'fieldbook-v2'
+const CACHE = 'fieldbook-v3'
 const GUSCIO = ['/', '/index.html', '/manifest.webmanifest', '/icona.svg']
 
 self.addEventListener('install', (e) => {
@@ -50,5 +50,42 @@ self.addEventListener('fetch', (e) => {
         .then((res) => salvaInCache(e.request, res))
         .catch(() => caches.match('/index.html'))
     )
+  )
+})
+
+/* --------------------------------------------------------------- avvisi */
+
+// Arriva un avviso dal server: lo mostriamo sul telefono anche se l'app
+// e' chiusa. Il browser pretende che ogni avviso si veda, quindi qui non
+// si puo' decidere di non mostrarlo.
+self.addEventListener('push', (e) => {
+  let dati = {}
+  try { dati = e.data ? e.data.json() : {} } catch { dati = {} }
+
+  e.waitUntil(self.registration.showNotification(dati.titolo || 'Fieldbook', {
+    body: dati.testo || '',
+    icon: '/icona-192.png',
+    badge: '/icona-192.png',
+    lang: 'it',
+    tag: dati.tag || 'fieldbook',
+    data: { url: dati.url || '/' }
+  }))
+})
+
+// Toccando l'avviso si apre il lavoro giusto, non la schermata iniziale.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const url = (e.notification.data && e.notification.data.url) || '/'
+
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((finestre) => {
+      for (const f of finestre) {
+        if ('focus' in f) {
+          if ('navigate' in f) f.navigate(url).catch(() => {})
+          return f.focus()
+        }
+      }
+      return self.clients.openWindow(url)
+    })
   )
 })

@@ -133,3 +133,24 @@ create table annotazioni (
   chiusa_il     timestamptz
 );
 create index on annotazioni (lavoro_id, fatta, creata_il desc);
+
+-- Impostazioni interne del server (per ora le chiavi degli avvisi, che il
+-- server genera da solo al primo avvio).
+create table impostazioni (
+  chiave        text primary key,
+  valore        jsonb not null,
+  aggiornata_il timestamptz not null default now()
+);
+
+-- Un telefono che ha acceso gli avvisi.
+create table iscrizioni_push (
+  id           uuid primary key default gen_random_uuid(),
+  utente_id    uuid not null references utenti(id) on delete cascade,
+  endpoint     text not null unique,
+  p256dh       text not null,
+  auth         text not null,
+  dispositivo  text,
+  creata_il    timestamptz not null default now(),
+  ultimo_invio timestamptz
+);
+create index on iscrizioni_push (utente_id);

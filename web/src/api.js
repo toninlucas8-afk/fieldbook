@@ -45,6 +45,8 @@ export const api = {
   eliminaLavoro: (id) => elimina(`/lavori/${id}`),
 
   colleghi: () => get('/colleghi'),
+  chiaveAvvisi: () => get('/avvisi/chiave'),
+  provaAvvisi: () => post('/avvisi/prova'),
   programmaLavoro: (id, { data_lavoro, ora_lavoro }) =>
     chiamata(`/lavori/${id}/programma`, {
       method: 'PUT',
@@ -164,4 +166,50 @@ export function ascoltaEventi (quandoArriva) {
 
   collega()
   return () => { chiusa = true; sorgente?.close() }
+}
+
+/* ---------------------------------------------------- avvisi sul telefono */
+
+const daBase64 = (base64) => {
+  const pieno = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')
+  const grezzo = atob(pieno)
+  return Uint8Array.from([...grezzo].map((c) => c.charCodeAt(0)))
+}
+
+export const avvisiPossibili = () =>
+  'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+
+// Se questo telefono e' gia' iscritto agli avvisi.
+export async function avvisiAttivi () {
+  if (!avvisiPossibili() || Notification.permission !== 'granted') return false
+  const reg = await navigator.serviceWorker.getRegistration()
+  return Boolean(await reg?.pushManager.getSubscription())
+}
+
+export async function accendiAvvisi () {
+  if (!avvisiPossibili()) {
+    throw new Error('Questo telefono non sa mostrare gli avvisi. Su iPhone bisogna prima aggiungere l\'app alla schermata.')
+  }
+  const permesso = await Notification.requestPermission()
+  if (permesso !== 'granted') {
+    throw new Error('Gli avvisi restano spenti. Puoi consentirli dalle impostazioni del telefono, alla voce notifiche.')
+  }
+
+  const reg = await navigator.serviceWorker.ready
+  const { chiave } = await get('/avvisi/chiave')
+  if (!chiave) throw new Error('Il server non ha ancora le chiavi degli avvisi. Riprova tra un minuto.')
+
+  const iscrizione = await reg.pushManager.getSubscription() ||
+    await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: daBase64(chiave) })
+
+  await post('/avvisi/iscrivi', iscrizione.toJSON())
+  return true
+}
+
+export async function spegniAvvisi () {
+  const reg = await navigator.serviceWorker.getRegistration()
+  const iscrizione = await reg?.pushManager.getSubscription()
+  if (!iscrizione) return
+  await post('/avvisi/disiscrivi', { endpoint: iscrizione.endpoint }).catch(() => {})
+  await iscrizione.unsubscribe().catch(() => {})
 }
