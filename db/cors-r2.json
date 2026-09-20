@@ -1,7 +1,7 @@
 [
   {
     "AllowedOrigins": [
-      "https://METTI-QUI-L-INDIRIZZO-DELL-APP.onrender.com",
+      "https://fieldbook-zjhy.onrender.com",
       "http://localhost:5173"
     ],
     "AllowedMethods": ["GET", "PUT", "HEAD"],
