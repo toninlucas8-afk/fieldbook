@@ -718,6 +718,65 @@ api.delete('/annotazioni/:id', richiediLogin, avvolgi(async (req, res) => {
   res.json({ ok: true })
 }))
 
+/* ------------------------------------------------------- blocco note mio */
+
+// Il blocco note e' personale: ognuno vede e tocca solo il proprio.
+// Non manda avvisi a nessuno e non compare da nessun'altra parte.
+api.get('/note', richiediLogin, avvolgi(async (req, res) => {
+  res.json(await q(
+    `select id, testo, fatta, creata_il, aggiornata_il
+       from note where utente_id = $1
+      order by fatta, creata_il desc`,
+    [req.utente.id]
+  ))
+}))
+
+api.post('/note', richiediLogin, avvolgi(async (req, res) => {
+  const testo = testoPulito(req.body?.testo, 2000)
+  if (!testo) return res.status(400).json({ errore: 'Scrivi qualcosa' })
+
+  res.status(201).json(await uno(
+    `insert into note (utente_id, testo) values ($1, $2)
+     returning id, testo, fatta, creata_il, aggiornata_il`,
+    [req.utente.id, testo]
+  ))
+}))
+
+api.patch('/note/:id', richiediLogin, avvolgi(async (req, res) => {
+  if (!idValido(req.params.id)) return res.status(404).json({ errore: 'Nota non trovata' })
+  const testo = testoPulito(req.body?.testo, 2000)
+  const fatta = typeof req.body?.fatta === 'boolean' ? req.body.fatta : null
+  if (testo === null && fatta === null) return res.status(400).json({ errore: 'Niente da cambiare' })
+
+  const nota = await uno(
+    `update note set
+       testo = coalesce($3, testo),
+       fatta = coalesce($4, fatta),
+       aggiornata_il = now()
+     where id = $1 and utente_id = $2
+     returning id, testo, fatta, creata_il, aggiornata_il`,
+    [req.params.id, req.utente.id, testo, fatta]
+  )
+  if (!nota) return res.status(404).json({ errore: 'Nota non trovata' })
+  res.json(nota)
+}))
+
+api.delete('/note/:id', richiediLogin, avvolgi(async (req, res) => {
+  if (!idValido(req.params.id)) return res.status(404).json({ errore: 'Nota non trovata' })
+  const nota = await uno(
+    'delete from note where id = $1 and utente_id = $2 returning id',
+    [req.params.id, req.utente.id]
+  )
+  if (!nota) return res.status(404).json({ errore: 'Nota non trovata' })
+  res.json({ ok: true })
+}))
+
+// Il bottone "togli quelle fatte", per non cancellarle una per una.
+api.delete('/note', richiediLogin, avvolgi(async (req, res) => {
+  const via = await q('delete from note where utente_id = $1 and fatta returning id', [req.utente.id])
+  res.json({ tolte: via.length })
+}))
+
 /* ---------------------------------------------------------------- squadra */
 
 api.get('/squadra', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {

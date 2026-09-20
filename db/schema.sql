@@ -180,3 +180,15 @@ create table condivisioni (
   ultima_apertura timestamptz
 );
 create index on condivisioni (lavoro_id, creata_il desc);
+
+-- Il blocco note personale: ognuno vede solo il proprio. Serve per le cose
+-- da ricordare che non riguardano un lavoro in particolare.
+create table note (
+  id            uuid primary key default gen_random_uuid(),
+  utente_id     uuid not null references utenti(id) on delete cascade,
+  testo         text not null,
+  fatta         boolean not null default false,
+  creata_il     timestamptz not null default now(),
+  aggiornata_il timestamptz not null default now()
+);
+create index on note (utente_id, fatta, creata_il desc);

@@ -10,7 +10,7 @@ const VISTE = [
   { id: 'tutti', testo: 'Tutti' }
 ]
 
-export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, esci, segnale }) {
+export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriSquadra, esci, segnale }) {
   const [vista, setVista] = useState('oggi')
   const [soloMiei, setSoloMiei] = useState(() => localStorage.getItem('fb-solo-miei') === '1')
   const [cerca, setCerca] = useState('')
@@ -175,6 +175,9 @@ export default function Lavori ({ utente, apriLavoro, apriNuovo, apriSquadra, es
           <div className="foglio" onClick={(e) => e.stopPropagation()}>
             <h2>{utente.nome}</h2>
             <Avvisi />
+            <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={() => { setMenu(false); apriNote() }}>
+              📝 Il mio blocco note
+            </button>
             <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={() => { setMenu(false); apriSquadra('mio-pin') }}>
               Cambia il mio PIN
             </button>

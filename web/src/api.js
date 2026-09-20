@@ -60,6 +60,14 @@ export const api = {
   eliminaLavoro: (id) => elimina(`/lavori/${id}`),
 
   colleghi: () => get('/colleghi'),
+
+  // Blocco note personale.
+  note: () => get('/note'),
+  creaNota: (testo) => post('/note', { testo }),
+  cambiaNota: (id, dati) => patch(`/note/${id}`, dati),
+  eliminaNota: (id) => elimina(`/note/${id}`),
+  togliNoteFatte: () => elimina('/note'),
+
   eliminaFirma: (id) => elimina(`/firme/${id}`),
   creaCondivisione: (lavoroId) => post(`/lavori/${lavoroId}/condivisioni`),
   eliminaCondivisione: (id) => elimina(`/condivisioni/${id}`),

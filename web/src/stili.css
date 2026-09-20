@@ -322,3 +322,10 @@ a { color: inherit; }
 .accesso .campo input { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); color: #fff; }
 .accesso .campo input::placeholder { color: rgba(255,255,255,.4); }
 .accesso .pin-input { letter-spacing: 9px; font-size: 21px; text-align: center; }
+
+/* Nel blocco note la prima riga tocca gia' il bordo della carta. */
+.note.senza-bordo li:first-child { border-top: 0; padding-top: 2px; }
+.note .corpo span { cursor: text; }
+.barra-azione .nuova-nota { width: 100%; }
+.barra-azione .nuova-nota input { background: var(--carta); min-height: 52px; }
+.barra-azione .nuova-nota .bottone { width: auto; flex: none; }

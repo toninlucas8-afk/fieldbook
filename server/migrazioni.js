@@ -86,6 +86,20 @@ const PASSI = [
       );
       create index if not exists condivisioni_lavoro_idx on condivisioni (lavoro_id, creata_il desc);
     `
+  },
+  {
+    nome: 'blocco note personale',
+    sql: `
+      create table if not exists note (
+        id            uuid primary key default gen_random_uuid(),
+        utente_id     uuid not null references utenti(id) on delete cascade,
+        testo         text not null,
+        fatta         boolean not null default false,
+        creata_il     timestamptz not null default now(),
+        aggiornata_il timestamptz not null default now()
+      );
+      create index if not exists note_utente_idx on note (utente_id, fatta, creata_il desc);
+    `
   }
 ]
 

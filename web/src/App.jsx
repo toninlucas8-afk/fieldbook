@@ -4,6 +4,7 @@ import { aggiornaConto, svuotaCoda } from './coda.js'
 import Accesso from './Accesso.jsx'
 import Lavori from './Lavori.jsx'
 import Lavoro from './Lavoro.jsx'
+import Note from './Note.jsx'
 import NuovoLavoro from './NuovoLavoro.jsx'
 import Squadra from './Squadra.jsx'
 
@@ -85,6 +86,9 @@ export default function App () {
         />
       )
 
+    case 'note':
+      return <Note indietro={aiLavori} />
+
     case 'squadra':
       return <Squadra utente={utente} indietro={aiLavori} apriSubitoMioPin={schermata.mioPin} />
 
@@ -95,6 +99,7 @@ export default function App () {
           apriLavoro={(id) => vaiA('lavoro', { id })}
           apriNuovo={() => vaiA('nuovo')}
           apriSquadra={(modo) => vaiA('squadra', { mioPin: modo === 'mio-pin' })}
+          apriNote={() => vaiA('note')}
         />
       )
   }
