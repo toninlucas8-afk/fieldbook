@@ -80,8 +80,20 @@ function miniatura (file, latoMax = 900) {
 }
 
 async function mettiSuR2 (url, corpo, tipoMime) {
-  const res = await fetch(url, { method: 'PUT', body: corpo, headers: { 'Content-Type': tipoMime } })
-  if (!res.ok) throw new Error('Caricamento non riuscito, riprova')
+  let res
+  try {
+    res = await fetch(url, { method: 'PUT', body: corpo, headers: { 'Content-Type': tipoMime } })
+  } catch {
+    // Qui fetch fallisce senza risposta: o il magazzino foto non accetta
+    // ancora le richieste da questo indirizzo, o il telefono ha perso la rete.
+    throw new Error(
+      'Il magazzino foto ha rifiutato il collegamento. Se sei in cantiere con poco campo riprova, ' +
+      'altrimenti manca il permesso sul bucket Cloudflare (criterio CORS).'
+    )
+  }
+  if (!res.ok) {
+    throw new Error(`Caricamento non riuscito (errore ${res.status}). Riprova.`)
+  }
 }
 
 // L'originale va su Cloudflare senza passare dal server: e' piu' veloce
