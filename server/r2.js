@@ -15,9 +15,18 @@ const BUCKET = process.env.R2_BUCKET
 const MINUTI_LETTURA = 60
 const MINUTI_SCRITTURA = 15
 
+// I bucket creati con una giurisdizione (per esempio EU) non stanno
+// sull'indirizzo normale ma su uno dedicato. In quel caso si passa
+// l'indirizzo completo con R2_ENDPOINT, che si legge nelle impostazioni
+// del bucket alla voce S3 API.
+const endpoint = process.env.R2_ENDPOINT?.trim().replace(/\/+$/, '') ||
+  `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+
+console.log(`Magazzino foto: bucket "${process.env.R2_BUCKET}" su ${endpoint}`)
+
 const s3 = new S3Client({
   region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint,
   // R2 vuole l'indirizzo con il bucket nel percorso, non come sottodominio.
   forcePathStyle: true,
   credentials: {
