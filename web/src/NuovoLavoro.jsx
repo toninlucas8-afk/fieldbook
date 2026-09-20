@@ -1,17 +1,29 @@
 import { useEffect, useState } from 'react'
 import { api } from './api.js'
+import { giornoISO, iniziali } from './utili.js'
 
 export default function NuovoLavoro ({ utente, indietro, quandoCreato }) {
   const [aziende, setAziende] = useState([])
+  const [colleghi, setColleghi] = useState([])
+  const [squadra, setSquadra] = useState(() => new Set([utente.id]))
   const [dati, setDati] = useState({
     titolo: '', azienda_id: '', cliente_nome: '', cliente_cognome: '',
-    cliente_telefono: '', indirizzo: '', note: ''
+    cliente_telefono: '', indirizzo: '', note: '', data_lavoro: '', ora_lavoro: ''
   })
   const [nuovaAzienda, setNuovaAzienda] = useState('')
   const [errore, setErrore] = useState('')
   const [attesa, setAttesa] = useState(false)
 
-  useEffect(() => { api.aziende().then(setAziende).catch(() => {}) }, [])
+  useEffect(() => {
+    api.aziende().then(setAziende).catch(() => {})
+    api.colleghi().then(setColleghi).catch(() => {})
+  }, [])
+
+  const cambiaSquadra = (id) => setSquadra((s) => {
+    const nuova = new Set(s)
+    if (nuova.has(id)) nuova.delete(id); else nuova.add(id)
+    return nuova
+  })
 
   const cambia = (campo) => (e) => setDati((d) => ({ ...d, [campo]: e.target.value }))
 
@@ -30,7 +42,13 @@ export default function NuovoLavoro ({ utente, indietro, quandoCreato }) {
     setErrore('')
     setAttesa(true)
     try {
-      const lavoro = await api.creaLavoro({ ...dati, azienda_id: dati.azienda_id || null })
+      const lavoro = await api.creaLavoro({
+        ...dati,
+        azienda_id: dati.azienda_id || null,
+        data_lavoro: dati.data_lavoro || null,
+        ora_lavoro: dati.data_lavoro ? (dati.ora_lavoro || null) : null,
+        assegnati: [...squadra]
+      })
       quandoCreato(lavoro.id)
     } catch (err) {
       setErrore(err.message)
@@ -95,6 +113,32 @@ export default function NuovoLavoro ({ utente, indietro, quandoCreato }) {
             <label htmlFor="ind">Indirizzo</label>
             <input id="ind" value={dati.indirizzo} onChange={cambia('indirizzo')}
               placeholder="Via, numero, città" />
+          </div>
+        </div>
+
+        <div className="carta">
+          <div className="quando-chi">
+            <div className="campo" style={{ marginBottom: 0 }}>
+              <label htmlFor="giorno">Quando</label>
+              <input id="giorno" type="date" min={giornoISO(new Date(Date.now() - 86400000 * 365))}
+                value={dati.data_lavoro} onChange={cambia('data_lavoro')} />
+            </div>
+            <div className="campo" style={{ marginBottom: 0 }}>
+              <label htmlFor="orario">Ora</label>
+              <input id="orario" type="time" value={dati.ora_lavoro}
+                onChange={cambia('ora_lavoro')} disabled={!dati.data_lavoro} />
+            </div>
+          </div>
+
+          <label className="titolo-campo">Chi ci va</label>
+          <div className="chi-ci-va">
+            {colleghi.map((p) => (
+              <button type="button" key={p.id} className="pillola" aria-pressed={squadra.has(p.id)}
+                onClick={() => cambiaSquadra(p.id)}>
+                <span className="cerchietto">{iniziali(p.nome)}</span>
+                {p.nome.split(' ')[0]}
+              </button>
+            ))}
           </div>
         </div>
 

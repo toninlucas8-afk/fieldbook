@@ -30,16 +30,28 @@ export const api = {
   aziende: () => get('/aziende'),
   creaAzienda: (dati) => post('/aziende', dati),
 
-  lavori: ({ stato, q } = {}) => {
+  lavori: ({ stato, q, da, a, mio } = {}) => {
     const p = new URLSearchParams()
     if (stato) p.set('stato', stato)
     if (q) p.set('q', q)
+    if (da) p.set('da', da)
+    if (a) p.set('a', a)
+    if (mio) p.set('mio', '1')
     return get(`/lavori${p.toString() ? `?${p}` : ''}`)
   },
   lavoro: (id) => get(`/lavori/${id}`),
   creaLavoro: (dati) => post('/lavori', dati),
   aggiornaLavoro: (id, dati) => patch(`/lavori/${id}`, dati),
   eliminaLavoro: (id) => elimina(`/lavori/${id}`),
+
+  colleghi: () => get('/colleghi'),
+  programmaLavoro: (id, { data_lavoro, ora_lavoro }) =>
+    chiamata(`/lavori/${id}/programma`, {
+      method: 'PUT',
+      body: JSON.stringify({ data_lavoro: data_lavoro || null, ora_lavoro: ora_lavoro || null })
+    }),
+  mettiInSquadra: (id, utenteId) => post(`/lavori/${id}/squadra`, { utente_id: utenteId }),
+  togliDaSquadra: (id, utenteId) => elimina(`/lavori/${id}/squadra/${utenteId}`),
 
   didascaliaFoto: (id, didascalia) => patch(`/foto/${id}`, { didascalia }),
   eliminaFoto: (id) => elimina(`/foto/${id}`),

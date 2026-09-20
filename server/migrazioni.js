@@ -20,6 +20,23 @@ const PASSI = [
       create index if not exists annotazioni_lavoro_idx
         on annotazioni (lavoro_id, fatta, creata_il desc);
     `
+  },
+  {
+    nome: 'agenda: giorno del montaggio e chi ci va',
+    sql: `
+      alter table lavori add column if not exists data_lavoro date;
+      alter table lavori add column if not exists ora_lavoro time;
+      create index if not exists lavori_data_idx on lavori (data_lavoro);
+
+      create table if not exists assegnazioni (
+        lavoro_id    uuid not null references lavori(id) on delete cascade,
+        utente_id    uuid not null references utenti(id) on delete cascade,
+        assegnato_da uuid references utenti(id) on delete set null,
+        assegnato_il timestamptz not null default now(),
+        primary key (lavoro_id, utente_id)
+      );
+      create index if not exists assegnazioni_utente_idx on assegnazioni (utente_id);
+    `
   }
 ]
 

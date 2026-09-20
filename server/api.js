@@ -106,6 +106,12 @@ const SELECT_LAVORO = `
          l.indirizzo, l.note, l.stato, l.creato_il, l.aggiornato_il, l.concluso_il,
          l.azienda_id, a.nome as azienda_nome, a.colore as azienda_colore,
          u.nome as creato_da_nome,
+         to_char(l.data_lavoro, 'YYYY-MM-DD') as data_lavoro,
+         to_char(l.ora_lavoro, 'HH24:MI') as ora_lavoro,
+         (select coalesce(json_agg(json_build_object('id', us.id, 'nome', us.nome)
+                                   order by us.nome), '[]'::json)
+            from assegnazioni asg join utenti us on us.id = asg.utente_id
+           where asg.lavoro_id = l.id) as assegnati,
          (select count(*) from foto f where f.lavoro_id = l.id)::int as foto_totali,
          (select count(*) from documenti d where d.lavoro_id = l.id)::int as documenti_totali,
          (select coalesce(f.chiave_mini, f.chiave) from foto f
@@ -117,9 +123,22 @@ const SELECT_LAVORO = `
   left join aziende a on a.id = l.azienda_id
   left join utenti u on u.id = l.creato_da`
 
+const GIORNO = /^\d{4}-\d{2}-\d{2}$/
+const giorno = (v) => (GIORNO.test(String(v || '')) ? v : null)
+const ORA = /^([01]\d|2[0-3]):[0-5]\d$/
+const ora = (v) => (ORA.test(String(v || '')) ? v : null)
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const idValido = (v) => (UUID.test(String(v || '')) ? String(v) : null)
+
 api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
   const stato = ['in_corso', 'concluso'].includes(req.query.stato) ? req.query.stato : null
   const cerca = testoPulito(req.query.q, 100)
+  // Il giorno lo decide il telefono: il server sta su un altro fuso orario.
+  const da = giorno(req.query.da)
+  const a_ = giorno(req.query.a)
+  const soloMiei = req.query.mio === '1'
+  // In agenda i lavori vanno in ordine di giorno; in archivio per ultima modifica.
+  const inAgenda = Boolean(da || a_)
 
   const righe = await q(
     `${SELECT_LAVORO}
@@ -128,9 +147,17 @@ api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
          l.titolo ilike '%' || $2 || '%' or l.indirizzo ilike '%' || $2 || '%'
          or l.cliente_nome ilike '%' || $2 || '%' or l.cliente_cognome ilike '%' || $2 || '%'
          or a.nome ilike '%' || $2 || '%'))
-     order by (l.stato = 'in_corso') desc, l.aggiornato_il desc
+       and ($3::date is null or l.data_lavoro >= $3)
+       and ($4::date is null or l.data_lavoro <= $4)
+       and ($5::boolean is not true or exists (
+         select 1 from assegnazioni asg
+          where asg.lavoro_id = l.id and asg.utente_id = $6))
+     order by
+       case when $7::boolean then l.data_lavoro end asc nulls last,
+       case when $7::boolean then l.ora_lavoro end asc nulls first,
+       (l.stato = 'in_corso') desc, l.aggiornato_il desc
      limit 200`,
-    [stato, cerca]
+    [stato, cerca, da, a_, soloMiei, req.utente.id, inAgenda]
   )
 
   res.json(await Promise.all(righe.map(async (r) => ({
@@ -144,12 +171,23 @@ api.post('/lavori', richiediLogin, avvolgi(async (req, res) => {
 
   const lavoro = await uno(
     `insert into lavori (titolo, azienda_id, cliente_nome, cliente_cognome,
-                         cliente_telefono, indirizzo, note, creato_da)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+                         cliente_telefono, indirizzo, note, data_lavoro, ora_lavoro, creato_da)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
     [titolo, testoPulito(req.body?.azienda_id, 40), testoPulito(req.body?.cliente_nome, 100),
      testoPulito(req.body?.cliente_cognome, 100), testoPulito(req.body?.cliente_telefono, 40),
-     testoPulito(req.body?.indirizzo, 300), testoPulito(req.body?.note, 4000), req.utente.id]
+     testoPulito(req.body?.indirizzo, 300), testoPulito(req.body?.note, 4000),
+     giorno(req.body?.data_lavoro), ora(req.body?.ora_lavoro), req.utente.id]
   )
+
+  const squadra = (Array.isArray(req.body?.assegnati) ? req.body.assegnati : [])
+    .map(idValido).filter(Boolean).slice(0, 20)
+  for (const utenteId of squadra) {
+    await q(
+      `insert into assegnazioni (lavoro_id, utente_id, assegnato_da)
+       values ($1, $2, $3) on conflict do nothing`,
+      [lavoro.id, utenteId, req.utente.id]
+    )
+  }
 
   await pubblica('lavoro_creato', { lavoroId: lavoro.id, utenteId: req.utente.id, payload: { titolo } })
   res.status(201).json(await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id]))
@@ -229,6 +267,68 @@ api.delete('/lavori/:id', richiediLogin, richiediAdmin, avvolgi(async (req, res)
 
   for (const r of chiavi) { await elimina(r.chiave); await elimina(r.chiave_mini) }
   await pubblica('lavoro_eliminato', { utenteId: req.utente.id, payload: { id: req.params.id } })
+  res.json({ ok: true })
+}))
+
+/* ----------------------------------------------------------------- agenda */
+
+// Chi c'e' in squadra, in chiaro per tutti: serve per dire chi va a un lavoro.
+api.get('/colleghi', richiediLogin, avvolgi(async (req, res) => {
+  res.json(await q('select id, nome, ruolo from utenti where attivo order by nome'))
+}))
+
+// Giorno e ora del montaggio. Senza giorno il lavoro esce dall'agenda.
+api.put('/lavori/:id/programma', richiediLogin, avvolgi(async (req, res) => {
+  // Togliere la data e' una scelta (esce dall'agenda); una data scritta
+  // male invece e' un errore, e va detto invece che cancellare in silenzio.
+  const data = giorno(req.body?.data_lavoro)
+  if (req.body?.data_lavoro && !data) return res.status(400).json({ errore: 'Giorno non valido' })
+  const oraDelGiorno = data ? ora(req.body?.ora_lavoro) : null
+  if (data && req.body?.ora_lavoro && !oraDelGiorno) return res.status(400).json({ errore: 'Ora non valida' })
+
+  const lavoro = await uno(
+    `update lavori set data_lavoro = $2, ora_lavoro = $3, aggiornato_il = now()
+     where id = $1 returning id`,
+    [req.params.id, data, oraDelGiorno]
+  )
+  if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
+
+  await pubblica('lavoro_programmato', {
+    lavoroId: lavoro.id, utenteId: req.utente.id,
+    payload: { data_lavoro: data, ora_lavoro: oraDelGiorno }
+  })
+  res.json(await uno(`${SELECT_LAVORO} where l.id = $1`, [lavoro.id]))
+}))
+
+api.post('/lavori/:id/squadra', richiediLogin, avvolgi(async (req, res) => {
+  const utenteId = idValido(req.body?.utente_id)
+  if (!utenteId) return res.status(400).json({ errore: 'Serve la persona da aggiungere' })
+
+  const persona = await uno('select id, nome from utenti where id = $1 and attivo', [utenteId])
+  if (!persona) return res.status(404).json({ errore: 'Persona non trovata' })
+  const lavoro = await uno('select id, titolo from lavori where id = $1', [req.params.id])
+  if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
+
+  await q(
+    `insert into assegnazioni (lavoro_id, utente_id, assegnato_da)
+     values ($1, $2, $3) on conflict do nothing`,
+    [lavoro.id, persona.id, req.utente.id]
+  )
+  await pubblica('squadra_cambiata', {
+    lavoroId: lavoro.id, utenteId: req.utente.id,
+    payload: { aggiunta: persona, titolo: lavoro.titolo }
+  })
+  res.status(201).json(persona)
+}))
+
+api.delete('/lavori/:id/squadra/:utenteId', richiediLogin, avvolgi(async (req, res) => {
+  const utenteId = idValido(req.params.utenteId)
+  if (!utenteId) return res.status(400).json({ errore: 'Persona non valida' })
+
+  await q('delete from assegnazioni where lavoro_id = $1 and utente_id = $2', [req.params.id, utenteId])
+  await pubblica('squadra_cambiata', {
+    lavoroId: req.params.id, utenteId: req.utente.id, payload: { tolta: utenteId }
+  })
   res.json({ ok: true })
 }))
 

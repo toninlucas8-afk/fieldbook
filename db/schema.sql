@@ -52,6 +52,8 @@ create table lavori (
   indirizzo      text,
   note           text,
   stato          text not null default 'in_corso' check (stato in ('in_corso','concluso')),
+  data_lavoro    date,                          -- giorno del montaggio, per l'agenda
+  ora_lavoro     time,                          -- ora dell'appuntamento, se c'e'
   copertina_foto_id uuid,                      -- FK aggiunta dopo, foto referenzia lavori
   creato_da      uuid references utenti(id) on delete set null,
   creato_il      timestamptz not null default now(),
@@ -60,6 +62,17 @@ create table lavori (
 );
 create index on lavori (stato, aggiornato_il desc);
 create index on lavori (azienda_id);
+create index on lavori (data_lavoro);
+
+-- Chi va a fare il montaggio: una riga per persona.
+create table assegnazioni (
+  lavoro_id    uuid not null references lavori(id) on delete cascade,
+  utente_id    uuid not null references utenti(id) on delete cascade,
+  assegnato_da uuid references utenti(id) on delete set null,
+  assegnato_il timestamptz not null default now(),
+  primary key (lavoro_id, utente_id)
+);
+create index on assegnazioni (utente_id);
 
 -- Le foto stanno su Cloudflare R2: qui teniamo solo il riferimento.
 create table foto (

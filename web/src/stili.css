@@ -122,6 +122,71 @@ a { color: inherit; }
   padding: 2px 6px; border-radius: 999px;
 }
 
+/* ----------------------------------------------------------------- agenda */
+
+.giorno {
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--testo-tenue); margin: 18px 2px 8px;
+}
+.contenuto > div:first-child > .giorno { margin-top: 4px; }
+
+.filtri .filtro-miei { margin-left: 4px; }
+.filtri .filtro-miei[aria-pressed="true"] { background: #fff1d9; border-color: #f0c98a; color: #8a5a00; }
+
+.etichetta.quando { background: #e8eefb; color: #2f4d86; }
+
+/* I visi di chi va a fare il montaggio. */
+.squadretta { display: inline-flex; margin-left: auto; padding-left: 6px; }
+.squadretta i {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--scuro-2); color: #fff;
+  font-size: 10.5px; font-weight: 700; font-style: normal;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--carta); margin-left: -6px;
+}
+.squadretta i:first-child { margin-left: 0; }
+.squadretta i.io { background: var(--arancio); color: #1b1200; }
+.squadretta i.altri { background: #e2e8f2; color: var(--testo-tenue); }
+
+.quando-chi { display: grid; grid-template-columns: 1.35fr 1fr; gap: 10px; }
+.quando-chi input { width: 100%; }
+.quando-chi input:disabled { opacity: .5; }
+
+.tolgo-data {
+  margin-top: 10px; font-size: 13.5px; color: var(--testo-tenue); text-decoration: underline;
+  padding: 4px 0;
+}
+
+.titolo-campo {
+  display: block; font-size: 13px; font-weight: 600;
+  color: var(--testo-tenue); margin: 14px 0 8px;
+}
+.chi-ci-va { display: flex; flex-wrap: wrap; gap: 8px; }
+.pillola {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: var(--sfondo); border: 1px solid var(--bordo); color: var(--testo);
+  min-height: 40px;
+}
+.pillola[aria-pressed="true"] { background: #fff1d9; border-color: #f0c98a; color: #8a5a00; }
+.pillola.aggiungi { border-style: dashed; color: var(--testo-tenue); }
+.pillola .cerchietto {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--scuro-2); color: #fff;
+  font-size: 9.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+
+.scelta-persona {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 11px 12px; border-radius: 12px; background: var(--carta);
+  border: 1px solid var(--bordo); margin-bottom: 8px; min-height: 56px;
+}
+.scelta-persona[aria-pressed="true"] { border-color: var(--arancio); background: #fff9f0; }
+.scelta-persona .cerchio {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--scuro-2); color: #fff;
+  font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.scelta-persona .nome { flex: 1; font-weight: 600; }
+.scelta-persona .segno { color: var(--arancio); font-size: 19px; font-weight: 700; width: 20px; }
+
 /* ------------------------------------------------- dettaglio del lavoro */
 
 .titolo-sezione { font-size: 16px; margin: 20px 0 10px; }

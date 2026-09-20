@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, caricaDocumento, caricaFoto } from './api.js'
-import { dataEstesa, linkMappe, nomeCliente, peso, quando } from './utili.js'
+import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando } from './utili.js'
 
 export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [lavoro, setLavoro] = useState(null)
@@ -11,6 +11,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [nuove, setNuove] = useState(() => new Set())
   const [nota, setNota] = useState('')
   const [salvoNota, setSalvoNota] = useState(false)
+  const [scegliChi, setScegliChi] = useState(false)
+  const [colleghi, setColleghi] = useState([])
 
   const inputFoto = useRef(null)
   const inputFotocamera = useRef(null)
@@ -69,6 +71,27 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
       await api.aggiornaLavoro(id, { stato })
     } catch (e) { setErrore(e.message) }
     ricarica()
+  }
+
+  // L'elenco della squadra serve solo quando si apre la scelta.
+  useEffect(() => {
+    if (scegliChi && colleghi.length === 0) api.colleghi().then(setColleghi).catch(() => {})
+  }, [scegliChi, colleghi.length])
+
+  async function programma (dataLavoro, oraLavoro) {
+    setLavoro((l) => ({ ...l, data_lavoro: dataLavoro, ora_lavoro: oraLavoro }))
+    try {
+      await api.programmaLavoro(id, { data_lavoro: dataLavoro, ora_lavoro: oraLavoro })
+    } catch (e) { setErrore(e.message) }
+    ricarica()
+  }
+
+  async function cambiaChiCiVa (persona, dentro) {
+    try {
+      if (dentro) await api.mettiInSquadra(id, persona.id)
+      else await api.togliDaSquadra(id, persona.id)
+      await ricarica()
+    } catch (e) { setErrore(e.message) }
   }
 
   async function eliminaDocumento (doc) {
@@ -133,6 +156,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const cliente = nomeCliente(lavoro)
   const note = lavoro.annotazioni || []
   const daFare = note.filter((a) => !a.fatta).length
+  const squadra = lavoro.assegnati || []
+  const inSquadra = new Set(squadra.map((p) => p.id))
 
   return (
     <>
@@ -191,6 +216,38 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
               {lavoro.note}
             </p>
           )}
+        </div>
+
+        <div className="carta">
+          <div className="quando-chi">
+            <div className="campo" style={{ marginBottom: 0 }}>
+              <label htmlFor="giorno">Giorno del montaggio</label>
+              <input id="giorno" type="date" value={lavoro.data_lavoro || ''}
+                onChange={(e) => programma(e.target.value || null, e.target.value ? lavoro.ora_lavoro : null)} />
+            </div>
+            <div className="campo" style={{ marginBottom: 0 }}>
+              <label htmlFor="orario">Ora</label>
+              <input id="orario" type="time" value={lavoro.ora_lavoro || ''} disabled={!lavoro.data_lavoro}
+                onChange={(e) => programma(lavoro.data_lavoro, e.target.value || null)} />
+            </div>
+          </div>
+
+          {lavoro.data_lavoro && (
+            <button className="tolgo-data" onClick={() => programma(null, null)}>Togli dall'agenda</button>
+          )}
+
+          <label className="titolo-campo">Chi ci va</label>
+          <div className="chi-ci-va">
+            {squadra.map((p) => (
+              <button key={p.id} className="pillola" onClick={() => cambiaChiCiVa(p, false)}
+                aria-label={`Togli ${p.nome}`}>
+                {p.nome} <span aria-hidden="true">✕</span>
+              </button>
+            ))}
+            <button className="pillola aggiungi" onClick={() => setScegliChi(true)}>
+              + Chi ci va
+            </button>
+          </div>
         </div>
 
         {invio && (
@@ -304,6 +361,27 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
           chiudi={() => setAperta(null)}
           quandoCambia={() => { setAperta(null); ricarica() }}
         />
+      )}
+
+      {scegliChi && (
+        <div className="foglio-sfondo" onClick={() => setScegliChi(false)}>
+          <div className="foglio" onClick={(e) => e.stopPropagation()}>
+            <h2>Chi va a fare questo montaggio</h2>
+            {colleghi.length === 0
+              ? <p className="riga-vuota">Carico la squadra…</p>
+              : colleghi.map((p) => (
+                <button key={p.id} className="scelta-persona" aria-pressed={inSquadra.has(p.id)}
+                  onClick={() => cambiaChiCiVa(p, !inSquadra.has(p.id))}>
+                  <span className="cerchio">{iniziali(p.nome)}</span>
+                  <span className="nome">{p.nome}{p.id === utente.id ? ' (tu)' : ''}</span>
+                  <span className="segno">{inSquadra.has(p.id) ? '✓' : ''}</span>
+                </button>
+                ))}
+            <button className="bottone chiaro" style={{ marginTop: 12 }} onClick={() => setScegliChi(false)}>
+              Fatto
+            </button>
+          </div>
+        </div>
       )}
 
       {menu && (
