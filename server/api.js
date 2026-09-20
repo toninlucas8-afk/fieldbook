@@ -5,7 +5,7 @@ import {
 } from './auth.js'
 import { q, uno } from './db.js'
 import { apriFlusso, eventiDopo, pubblica } from './eventi.js'
-import { elimina, estensionePer, nuovaChiave, urlPerCaricare, urlPerVedere } from './r2.js'
+import { elimina, estensionePer, nuovaChiave, provaMagazzino, urlPerCaricare, urlPerVedere } from './r2.js'
 
 export const api = express.Router()
 
@@ -48,6 +48,18 @@ api.get('/eventi', richiediLogin, avvolgi(async (req, res) => {
   for (const evento of await eventiDopo(dopo)) {
     res.write(`id: ${evento.id}\ndata: ${JSON.stringify(evento)}\n\n`)
   }
+}))
+
+/* ----------------------------------------------------------- diagnostica */
+
+// Aprendo questo indirizzo nel browser, da amministratore, si vede subito
+// se il magazzino foto funziona e, se non funziona, perche'.
+api.get('/diagnostica', richiediLogin, richiediAdmin, avvolgi(async (req, res) => {
+  const magazzino = await provaMagazzino()
+  res.status(magazzino.ok ? 200 : 503).json({
+    database: 'ok',
+    magazzino_foto: magazzino
+  })
 }))
 
 /* ---------------------------------------------------------------- aziende */

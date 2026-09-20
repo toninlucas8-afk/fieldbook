@@ -78,6 +78,56 @@ export function urlPerVedere (chiave, { nomeScaricato } = {}) {
   )
 }
 
+// Se R2 rifiuta un caricamento, la sua risposta d'errore non porta le
+// intestazioni CORS: il browser non riesce a leggerla e mostra un errore
+// generico, identico a quello di un permesso mancante. Questa prova fa lo
+// stesso giro dal server, dove l'errore vero si legge per intero.
+function spiegaErrore (e) {
+  const codice = e?.name || e?.Code || ''
+  const stato = e?.$metadata?.httpStatusCode
+
+  if (/InvalidAccessKeyId/i.test(codice)) {
+    return "L'Access Key ID non e' riconosciuto da Cloudflare. Controlla R2_ACCESS_KEY_ID."
+  }
+  if (/SignatureDoesNotMatch/i.test(codice)) {
+    return 'La chiave segreta non corrisponde al suo Access Key ID. Le due chiavi devono venire dallo stesso token.'
+  }
+  if (/NoSuchBucket/i.test(codice)) {
+    return `Il bucket "${BUCKET}" non esiste a questo indirizzo. Controlla R2_BUCKET e R2_ENDPOINT.`
+  }
+  if (/AccessDenied|Forbidden/i.test(codice) || stato === 403) {
+    return 'Il token non ha il permesso di scrivere su questo bucket. Serve Lettura e scrittura di oggetti sul bucket giusto.'
+  }
+  return `Errore non previsto: ${[codice, e?.message].filter(Boolean).join(' - ') || 'sconosciuto'}`
+}
+
+// Scrive un file finto e lo cancella subito: e' il modo piu' onesto di
+// sapere se le chiavi funzionano davvero.
+export async function provaMagazzino () {
+  const chiave = `diagnostica/prova-${Date.now()}.txt`
+  const inizio = Date.now()
+
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET, Key: chiave, Body: 'prova', ContentType: 'text/plain'
+    }))
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: chiave }))
+    return {
+      ok: true, bucket: BUCKET, endpoint,
+      millisecondi: Date.now() - inizio,
+      messaggio: 'Il magazzino foto risponde e accetta i file. Le chiavi sono giuste.'
+    }
+  } catch (e) {
+    console.error('Prova del magazzino foto fallita:', e?.name, e?.message)
+    return {
+      ok: false, bucket: BUCKET, endpoint,
+      codice: e?.name || null,
+      stato: e?.$metadata?.httpStatusCode || null,
+      messaggio: spiegaErrore(e)
+    }
+  }
+}
+
 export async function elimina (chiave) {
   if (!chiave) return
   try {
