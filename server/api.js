@@ -40,6 +40,28 @@ api.post('/logout', avvolgi(async (req, res) => {
 
 api.get('/io', richiediLogin, (req, res) => res.json({ utente: req.utente }))
 
+// Quali riquadri tiene nella schermata di casa, e in che ordine. Sta
+// sull'account, non sul telefono: cambiando telefono li ritrova com'erano.
+const RIQUADRI = ['oggi', 'ritardo', 'numeri', 'prossimi', 'note', 'foto', 'snake']
+export const RIQUADRI_PARTENZA = ['oggi', 'ritardo', 'numeri', 'prossimi', 'note', 'foto']
+
+api.put('/io/preferenze', richiediLogin, avvolgi(async (req, res) => {
+  const prima = req.utente.preferenze || {}
+  const dopo = { ...prima }
+
+  if (Array.isArray(req.body?.riquadri)) {
+    dopo.riquadri = [...new Set(req.body.riquadri.filter((x) => RIQUADRI.includes(x)))]
+  }
+  // Una volta trovato, il gioco resta trovato.
+  if (req.body?.snake === true) dopo.snake = true
+
+  const riga = await uno(
+    'update utenti set preferenze = $2 where id = $1 returning preferenze',
+    [req.utente.id, JSON.stringify(dopo)]
+  )
+  res.json(riga.preferenze)
+}))
+
 api.post('/io/pin', richiediLogin, avvolgi(async (req, res) => {
   await cambiaPin(req.utente.id, req.body?.pin)
   res.json({ ok: true, avviso: 'PIN cambiato. Devi rientrare su tutti i tuoi telefoni.' })
@@ -336,7 +358,7 @@ api.post('/avvisi/disiscrivi', richiediLogin, avvolgi(async (req, res) => {
 // Serve a chi accende gli avvisi per vedere subito che arrivano davvero.
 api.post('/avvisi/prova', richiediLogin, avvolgi(async (req, res) => {
   const esito = await avvisa([req.utente.id], {
-    titolo: 'Fieldbook', testo: 'Gli avvisi su questo telefono funzionano.', tag: 'prova'
+    titolo: 'Silcom', testo: 'Gli avvisi su questo telefono funzionano.', tag: 'prova'
   })
   res.json(esito)
 }))
@@ -832,6 +854,8 @@ api.get('/riassunto', richiediLogin, avvolgi(async (req, res) => {
   })))
 
   res.json({
+    riquadri: req.utente.preferenze?.riquadri || RIQUADRI_PARTENZA,
+    snake: req.utente.preferenze?.snake === true,
     oggi: await conCopertina(dioggi),
     prossimi: await conCopertina(prossimi),
     ...conti,

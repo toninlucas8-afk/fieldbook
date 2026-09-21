@@ -3,11 +3,13 @@ import { api, ascoltaEventi } from './api.js'
 import { aggiornaConto, svuotaCoda } from './coda.js'
 import Accesso from './Accesso.jsx'
 import Home from './Home.jsx'
+import Intro from './Intro.jsx'
 import Lavori from './Lavori.jsx'
 import Menu from './Menu.jsx'
 import Lavoro from './Lavoro.jsx'
 import Note from './Note.jsx'
 import NuovoLavoro from './NuovoLavoro.jsx'
+import Snake from './Snake.jsx'
 import Squadra from './Squadra.jsx'
 
 export default function App () {
@@ -19,6 +21,8 @@ export default function App () {
     return id ? { nome: 'lavoro', id } : { nome: 'home' }
   })
   const [menu, setMenu] = useState(false)
+  // La scritta dell'apertura si vede a ogni avvio, come nei film.
+  const [intro, setIntro] = useState(true)
   const [vistaLavori, setVistaLavori] = useState(null)
   const [segnale, setSegnale] = useState(null)
 
@@ -78,8 +82,14 @@ export default function App () {
   // Le tre sezioni con la barra in basso: casa, lavori, blocco note.
   const sezione = (nome) => vaiA(nome)
 
-  if (!controllato) return <div className="vuoto" style={{ paddingTop: '38vh' }}>Apro Fieldbook…</div>
-  if (!utente) return <Accesso quandoEntra={(u) => { setUtente(u); aCasa() }} />
+  const apertura = intro ? <Intro fine={() => setIntro(false)} /> : null
+
+  if (!controllato) {
+    return <>{apertura}<div className="vuoto" style={{ paddingTop: '38vh' }}>Apro Silcom…</div></>
+  }
+  if (!utente) {
+    return <>{apertura}<Accesso quandoEntra={(u) => { setUtente(u); aCasa() }} /></>
+  }
 
   const apriSquadra = (modo) => vaiA('squadra', { mioPin: modo === 'mio-pin' })
 
@@ -107,6 +117,9 @@ export default function App () {
       case 'squadra':
         return <Squadra utente={utente} indietro={aCasa} apriSubitoMioPin={schermata.mioPin} />
 
+      case 'gioco':
+        return <Snake grande chiudi={aCasa} />
+
       case 'lavori':
         return (
           <Lavori
@@ -128,6 +141,7 @@ export default function App () {
             apriNote={() => vaiA('note')}
             apriLavori={(vista) => vaiA('lavori', { vista })}
             apriMenu={() => setMenu(true)}
+            apriGioco={() => vaiA('gioco')}
           />
         )
     }
@@ -135,6 +149,7 @@ export default function App () {
 
   return (
     <>
+      {apertura}
       {schermo()}
       {menu && (
         <Menu

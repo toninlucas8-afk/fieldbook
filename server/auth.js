@@ -66,7 +66,7 @@ export async function cambiaPin (utenteId, pin) {
 
 export async function login ({ nome, pin, dispositivo }) {
   const utente = await uno(
-    `select id, nome, ruolo, pin_hash, attivo, tentativi_falliti, bloccato_fino
+    `select id, nome, ruolo, pin_hash, attivo, tentativi_falliti, bloccato_fino, preferenze
      from utenti where nome_norm = $1`,
     [normalizzaNome(nome)]
   )
@@ -112,7 +112,10 @@ export async function login ({ nome, pin, dispositivo }) {
     [utente.id]
   )
 
-  return { token, utente: { id: utente.id, nome: utente.nome, ruolo: utente.ruolo } }
+  return {
+    token,
+    utente: { id: utente.id, nome: utente.nome, ruolo: utente.ruolo, preferenze: utente.preferenze || {} }
+  }
 }
 
 export function impostaCookie (res, token) {
@@ -139,7 +142,7 @@ export async function richiediLogin (req, res, next) {
     if (!token) return res.status(401).json({ errore: 'Devi entrare con nome e PIN' })
 
     const riga = await uno(
-      `select s.id as sessione_id, u.id, u.nome, u.ruolo, u.attivo
+      `select s.id as sessione_id, u.id, u.nome, u.ruolo, u.attivo, u.preferenze
        from sessioni s join utenti u on u.id = s.utente_id
        where s.token_hash = $1 and s.scade_il > now()`,
       [hashToken(token)]
@@ -149,7 +152,7 @@ export async function richiediLogin (req, res, next) {
       return res.status(401).json({ errore: 'Devi entrare con nome e PIN' })
     }
 
-    req.utente = { id: riga.id, nome: riga.nome, ruolo: riga.ruolo }
+    req.utente = { id: riga.id, nome: riga.nome, ruolo: riga.ruolo, preferenze: riga.preferenze || {} }
     q('update sessioni set ultimo_uso = now() where id = $1', [riga.sessione_id]).catch(() => {})
     next()
   } catch (e) { next(e) }

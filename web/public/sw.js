@@ -1,4 +1,4 @@
-// Service worker minimo: serve a rendere Fieldbook installabile sul telefono
+// Service worker minimo: serve a rendere Silcom installabile sul telefono
 // e a farla aprire anche quando la linea e' pessima.
 const CACHE = 'fieldbook-v6'
 const GUSCIO = ['/', '/index.html', '/manifest.webmanifest', '/icona.svg']
@@ -62,7 +62,7 @@ self.addEventListener('push', (e) => {
   let dati = {}
   try { dati = e.data ? e.data.json() : {} } catch { dati = {} }
 
-  e.waitUntil(self.registration.showNotification(dati.titolo || 'Fieldbook', {
+  e.waitUntil(self.registration.showNotification(dati.titolo || 'Silcom', {
     body: dati.testo || '',
     icon: '/icona-192.png',
     badge: '/icona-192.png',

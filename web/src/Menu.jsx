@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { accendiAvvisi, api, avvisiAttivi, avvisiPossibili, spegniAvvisi } from './api.js'
+import { cambiaSuono, suonoSpento } from './suono.js'
 
 // Il foglio che sale dal basso toccando i tre puntini: le cose che
 // riguardano te e questo telefono, non i lavori.
 export default function Menu ({ utente, chiudi, apriNote, apriSquadra, esci }) {
+  const [suono, setSuono] = useState(() => !suonoSpento())
+
   return (
     <div className="foglio-sfondo" onClick={chiudi}>
       <div className="foglio" onClick={(e) => e.stopPropagation()}>
@@ -19,6 +22,12 @@ export default function Menu ({ utente, chiudi, apriNote, apriSquadra, esci }) {
         )}
         <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={() => { chiudi(); apriSquadra('mio-pin') }}>
           Cambia il mio PIN
+        </button>
+        <button
+          className="bottone chiaro" style={{ marginBottom: 10 }}
+          onClick={() => { cambiaSuono(!suono); setSuono(!suono) }}
+        >
+          {suono ? '🔊 Suono all’apertura: acceso' : '🔇 Suono all’apertura: spento'}
         </button>
         <button className="bottone pericolo" onClick={esci}>Esci da questo telefono</button>
       </div>

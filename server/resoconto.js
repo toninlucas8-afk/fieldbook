@@ -36,7 +36,7 @@ export function paginaResoconto ({ lavoro, foto, firme, daFare }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>${esc(lavoro.titolo)} - Fieldbook</title>
+<title>${esc(lavoro.titolo)} - Silcom</title>
 <style>
   :root { --scuro:#14243a; --arancio:#f4a63a; --tenue:#64748b; --bordo:#dfe5ee; }
   * { box-sizing: border-box; }
@@ -112,7 +112,7 @@ export function paginaResoconto ({ lavoro, foto, firme, daFare }) {
     <button class="stampa" onclick="window.print()">Stampa o salva in PDF</button>
   </main>
 
-  <footer>Pagina generata da Fieldbook. Il link scade automaticamente.</footer>
+  <footer>Pagina generata da Silcom. Il link scade automaticamente.</footer>
 </body>
 </html>`
 }

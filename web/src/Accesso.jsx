@@ -27,7 +27,7 @@ export default function Accesso ({ quandoEntra }) {
     <div className="accesso">
       <div className="marchio">
         <img src="/icona.svg" alt="" />
-        <h1>Fieldbook</h1>
+        <h1>Silcom</h1>
         <p>I lavori della squadra, sempre aggiornati</p>
       </div>
 

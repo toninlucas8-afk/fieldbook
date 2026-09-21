@@ -114,6 +114,12 @@ const PASSI = [
       alter table foto add column if not exists ritoccata_da uuid references utenti(id) on delete set null;
       alter table foto add column if not exists ritoccata_il timestamptz;
     `
+  },
+  {
+    nome: 'preferenze di ognuno (riquadri della schermata di casa)',
+    sql: `
+      alter table utenti add column if not exists preferenze jsonb not null default '{}'::jsonb;
+    `
   }
 ]
 

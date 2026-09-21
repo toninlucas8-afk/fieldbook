@@ -64,4 +64,4 @@ try {
   process.exit(1)
 }
 
-app.listen(porta, () => console.log(`Fieldbook in ascolto sulla porta ${porta}`))
+app.listen(porta, () => console.log(`Silcom in ascolto sulla porta ${porta}`))

@@ -98,7 +98,7 @@ export default function Squadra ({ utente, indietro, apriSubitoMioPin }) {
 
 // Il PIN si vede solo adesso: dopo resta salvato cifrato e non e' piu' leggibile.
 function PinDaConsegnare ({ nome, pin, chiudi }) {
-  const messaggio = `Ciao ${nome.split(' ')[0]}, questo è il tuo accesso a Fieldbook.\nNome: ${nome}\nPIN: ${pin}\n\nApri il link dell'app, entra con nome e PIN, poi aggiungila alla schermata iniziale.`
+  const messaggio = `Ciao ${nome.split(' ')[0]}, questo è il tuo accesso a Silcom.\nNome: ${nome}\nPIN: ${pin}\n\nApri il link dell'app, entra con nome e PIN, poi aggiungila alla schermata iniziale.`
 
   return (
     <div className="pin-mostrato">

@@ -16,7 +16,8 @@ create table utenti (
   tentativi_falliti int not null default 0,
   bloccato_fino timestamptz,                   -- anti tentativi a raffica
   creato_il     timestamptz not null default now(),
-  ultimo_accesso timestamptz
+  ultimo_accesso timestamptz,
+  preferenze    jsonb not null default '{}'::jsonb  -- quali riquadri tiene in casa, e cosa ha trovato
 );
 
 -- Un telefono che ha gia' fatto il login: evita di ridigitare il PIN ogni giorno.
