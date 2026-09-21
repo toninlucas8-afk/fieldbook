@@ -55,7 +55,10 @@ export default function Snake ({ grande = false, chiudi }) {
 
     const misura = () => {
       const largo = c.parentElement.clientWidth
-      const lato = Math.floor(largo / COLONNE)
+      // A tutto schermo il campo si prende quello che c'e', ma resta quadrato
+      // e lascia posto alle frecce sotto.
+      const altoMax = grande ? window.innerHeight * 0.58 : Infinity
+      const lato = Math.floor(Math.min(largo / COLONNE, altoMax / RIGHE))
       const densita = Math.min(window.devicePixelRatio || 1, 2)
       c.width = lato * COLONNE * densita
       c.height = lato * RIGHE * densita
@@ -143,7 +146,7 @@ export default function Snake ({ grande = false, chiudi }) {
     requestAnimationFrame(giro)
 
     return () => { vivo = false; window.removeEventListener('resize', quandoCambia) }
-  }, [stato])
+  }, [stato, grande])
 
   useEffect(() => {
     const tasto = (e) => {
