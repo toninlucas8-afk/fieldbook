@@ -50,6 +50,8 @@ create table lavori (
   cliente_cognome text,
   cliente_telefono text,
   indirizzo      text,
+  referente      text,                          -- chi ha seguito il progetto in azienda
+  referente_telefono text,
   note           text,
   stato          text not null default 'in_corso' check (stato in ('in_corso','concluso')),
   data_lavoro    date,                          -- giorno del montaggio, per l'agenda
@@ -86,7 +88,9 @@ create table foto (
   byte          bigint,
   scattata_il   timestamptz,                   -- data dagli EXIF, quando c'e'
   caricata_da   uuid references utenti(id) on delete set null,
-  caricata_il   timestamptz not null default now()
+  caricata_il   timestamptz not null default now(),
+  ritoccata_da  uuid references utenti(id) on delete set null,
+  ritoccata_il  timestamptz                    -- se qualcuno ha corretto luce e contrasto
 );
 create index on foto (lavoro_id, caricata_il desc);
 

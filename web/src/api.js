@@ -171,6 +171,24 @@ export async function caricaDocumento (lavoroId, file) {
   })
 }
 
+// La foto corretta prende il posto di quella vecchia: stesso posto
+// nell'elenco, stessa didascalia, immagine nuova.
+export async function ritoccaFoto (fotoId, immagine, { larghezza, altezza } = {}) {
+  const spazio = await post(`/foto/${fotoId}/ritocco/spazio`)
+  const mini = await miniatura(immagine)
+
+  await mettiSuR2(spazio.url_put, immagine, 'image/jpeg')
+  if (mini.blob) await mettiSuR2(spazio.url_put_mini, mini.blob, 'image/jpeg')
+
+  return post(`/foto/${fotoId}/ritocco`, {
+    chiave: spazio.chiave,
+    chiave_mini: mini.blob ? spazio.chiave_mini : null,
+    larghezza: larghezza || mini.larghezza || null,
+    altezza: altezza || mini.altezza || null,
+    byte: immagine.size
+  })
+}
+
 // La firma disegnata sullo schermo segue la stessa strada delle foto.
 export async function caricaFirma (lavoroId, immagine, dati) {
   const spazio = await post(`/lavori/${lavoroId}/firma/spazio`)

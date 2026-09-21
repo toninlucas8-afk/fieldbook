@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, caricaDocumento } from './api.js'
 import Firma from './Firma.jsx'
+import Visore from './Foto.jsx'
 import { ascoltaCoda, mandaFotoOAccoda, svuotaCoda } from './coda.js'
 import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando, soloData } from './utili.js'
 
@@ -8,10 +9,11 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [lavoro, setLavoro] = useState(null)
   const [errore, setErrore] = useState('')
   const [invio, setInvio] = useState(null)      // { fatte, totali }
-  const [aperta, setAperta] = useState(null)    // foto nel visore
+  const [aperta, setAperta] = useState(null)    // quale foto e' aperta nel visore
   const [menu, setMenu] = useState(false)
   const [nuove, setNuove] = useState(() => new Set())
   const [nota, setNota] = useState('')
+  const [referente, setReferente] = useState(null)  // { referente, referente_telefono }
   const [salvoNota, setSalvoNota] = useState(false)
   const [scegliChi, setScegliChi] = useState(false)
   const [colleghi, setColleghi] = useState([])
@@ -145,6 +147,16 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     } catch (e) { segnala(e) }
   }
 
+  // Chi ha seguito il progetto in azienda: si scrive e si salva uscendo
+  // dal campo, senza bottoni.
+  async function salvaReferente (campo, valore) {
+    if ((lavoro[campo] || '') === valore.trim()) return
+    try {
+      await api.aggiornaLavoro(id, { [campo]: valore.trim() })
+      await ricarica()
+    } catch (e) { segnala(e) }
+  }
+
   async function eliminaFirma (firma) {
     if (!confirm('Elimino la firma?')) return
     try {
@@ -269,6 +281,41 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
         </div>
 
         <div className="carta">
+          <div className="campo">
+            <label htmlFor="referente">
+              Chi ha fatto il progetto{lavoro.azienda_nome ? ` da ${lavoro.azienda_nome}` : ''}
+            </label>
+            <input
+              id="referente" placeholder="Nome della persona"
+              value={referente ? referente.referente : (lavoro.referente || '')}
+              onChange={(e) => setReferente({
+                referente: e.target.value,
+                referente_telefono: referente ? referente.referente_telefono : (lavoro.referente_telefono || '')
+              })}
+              onBlur={(e) => salvaReferente('referente', e.target.value)}
+            />
+          </div>
+
+          <div className="campo" style={{ marginBottom: 0 }}>
+            <label htmlFor="tel-referente">Suo telefono</label>
+            <div className="due">
+              <input
+                id="tel-referente" type="tel" inputMode="tel" placeholder="Facoltativo"
+                value={referente ? referente.referente_telefono : (lavoro.referente_telefono || '')}
+                onChange={(e) => setReferente({
+                  referente: referente ? referente.referente : (lavoro.referente || ''),
+                  referente_telefono: e.target.value
+                })}
+                onBlur={(e) => salvaReferente('referente_telefono', e.target.value)}
+              />
+              {lavoro.referente_telefono && (
+                <a className="bottone chiaro piccolo" href={`tel:${lavoro.referente_telefono}`}>📞 Chiama</a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="carta">
           <div className="quando-chi">
             <div className="campo" style={{ marginBottom: 0 }}>
               <label htmlFor="giorno">Giorno del montaggio</label>
@@ -328,8 +375,8 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
           ? <p className="riga-vuota">Ancora nessuna foto. Scattane una con i bottoni qui sotto.</p>
           : (
             <div className="griglia-foto">
-              {lavoro.foto.map((f) => (
-                <button key={f.id} className={nuove.has(f.id) ? 'nuova' : ''} onClick={() => setAperta(f)}>
+              {lavoro.foto.map((f, posto) => (
+                <button key={f.id} className={nuove.has(f.id) ? 'nuova' : ''} onClick={() => setAperta(posto)}>
                   <img src={f.url_mini} alt={f.didascalia || ''} loading="lazy" />
                 </button>
               ))}
@@ -472,11 +519,11 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
       <input ref={inputDoc} type="file" multiple hidden
         onChange={(e) => { mandaDocumento(e.target.files); e.target.value = '' }} />
 
-      {aperta && (
+      {aperta !== null && lavoro.foto.length > 0 && (
         <Visore
-          foto={aperta} utente={utente}
+          foto={lavoro.foto} indice={Math.min(aperta, lavoro.foto.length - 1)} utente={utente}
           chiudi={() => setAperta(null)}
-          quandoCambia={() => { setAperta(null); ricarica() }}
+          quandoCambia={(o) => { if (!o?.resta) setAperta(null); ricarica() }}
         />
       )}
 
@@ -523,45 +570,5 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
         </div>
       )}
     </>
-  )
-}
-
-function Visore ({ foto, utente, chiudi, quandoCambia }) {
-  const [didascalia, setDidascalia] = useState(foto.didascalia || '')
-  const [salvata, setSalvata] = useState(false)
-  const puoEliminare = utente.ruolo === 'admin' || foto.caricata_da === utente.id
-
-  async function salva () {
-    await api.didascaliaFoto(foto.id, didascalia)
-    setSalvata(true)
-    setTimeout(() => setSalvata(false), 1600)
-  }
-
-  async function elimina () {
-    if (!confirm('Elimino questa foto?')) return
-    await api.eliminaFoto(foto.id)
-    quandoCambia()
-  }
-
-  return (
-    <div className="visore">
-      <div className="barra">
-        <button className="indietro" onClick={chiudi} aria-label="Chiudi">✕</button>
-        <span className="spazio" />
-        <a className="azione-testata" href={foto.url} target="_blank" rel="noreferrer" download>Scarica</a>
-        {puoEliminare && <button className="azione-testata" onClick={elimina}>Elimina</button>}
-      </div>
-
-      <img src={foto.url} alt={foto.didascalia || ''} />
-
-      <div className="piede">
-        <div>Caricata da {foto.caricata_da_nome || 'qualcuno'} · {quando(foto.caricata_il)} · {peso(foto.byte)}</div>
-        <input
-          value={didascalia} onChange={(e) => setDidascalia(e.target.value)}
-          onBlur={salva} placeholder="Aggiungi una didascalia…"
-        />
-        {salvata && <small style={{ color: 'var(--arancio)' }}>Didascalia salvata</small>}
-      </div>
-    </div>
   )
 }

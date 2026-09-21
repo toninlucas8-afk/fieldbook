@@ -17,6 +17,10 @@ const testoPulito = (v, max = 500) => {
   return s ? s.slice(0, max) : null
 }
 
+// Per i campi che si devono poter anche svuotare: se non arriva niente il
+// valore resta com'e', se arriva vuoto il campo viene cancellato.
+const svuotabile = (v, max = 500) => (v === undefined ? null : (testoPulito(v, max) ?? ''))
+
 /* ---------------------------------------------------------------- accesso */
 
 api.post('/login', avvolgi(async (req, res) => {
@@ -106,6 +110,7 @@ api.patch('/aziende/:id', richiediLogin, richiediAdmin, avvolgi(async (req, res)
 const SELECT_LAVORO = `
   select l.id, l.titolo, l.cliente_nome, l.cliente_cognome, l.cliente_telefono,
          l.indirizzo, l.note, l.stato, l.creato_il, l.aggiornato_il, l.concluso_il,
+         l.referente, l.referente_telefono,
          l.azienda_id, a.nome as azienda_nome, a.colore as azienda_colore,
          u.nome as creato_da_nome,
          to_char(l.data_lavoro, 'YYYY-MM-DD') as data_lavoro,
@@ -158,6 +163,7 @@ api.get('/lavori', richiediLogin, avvolgi(async (req, res) => {
        and ($2::text is null or (
          l.titolo ilike '%' || $2 || '%' or l.indirizzo ilike '%' || $2 || '%'
          or l.cliente_nome ilike '%' || $2 || '%' or l.cliente_cognome ilike '%' || $2 || '%'
+         or l.referente ilike '%' || $2 || '%'
          or a.nome ilike '%' || $2 || '%'))
        and ($3::date is null or l.data_lavoro >= $3)
        and ($4::date is null or l.data_lavoro <= $4)
@@ -183,11 +189,13 @@ api.post('/lavori', richiediLogin, avvolgi(async (req, res) => {
 
   const lavoro = await uno(
     `insert into lavori (titolo, azienda_id, cliente_nome, cliente_cognome,
-                         cliente_telefono, indirizzo, note, data_lavoro, ora_lavoro, creato_da)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+                         cliente_telefono, indirizzo, referente, referente_telefono,
+                         note, data_lavoro, ora_lavoro, creato_da)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
     [titolo, testoPulito(req.body?.azienda_id, 40), testoPulito(req.body?.cliente_nome, 100),
      testoPulito(req.body?.cliente_cognome, 100), testoPulito(req.body?.cliente_telefono, 40),
-     testoPulito(req.body?.indirizzo, 300), testoPulito(req.body?.note, 4000),
+     testoPulito(req.body?.indirizzo, 300), testoPulito(req.body?.referente, 120),
+     testoPulito(req.body?.referente_telefono, 40), testoPulito(req.body?.note, 4000),
      giorno(req.body?.data_lavoro), ora(req.body?.ora_lavoro), req.utente.id]
   )
 
@@ -211,7 +219,8 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
 
   const [foto, documenti, annotazioni, firme, condivisioni] = await Promise.all([
     q(`select f.id, f.chiave, f.chiave_mini, f.didascalia, f.larghezza, f.altezza,
-              f.byte, f.scattata_il, f.caricata_il, f.caricata_da, u.nome as caricata_da_nome
+              f.byte, f.scattata_il, f.caricata_il, f.caricata_da, f.ritoccata_il,
+              u.nome as caricata_da_nome
        from foto f left join utenti u on u.id = f.caricata_da
        where f.lavoro_id = $1 order by f.caricata_il desc`, [req.params.id]),
     q(`select d.id, d.chiave, d.nome_file, d.tipo_mime, d.byte, d.caricato_il,
@@ -262,6 +271,10 @@ api.patch('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
        indirizzo = coalesce($7, indirizzo),
        note = coalesce($8, note),
        stato = coalesce($9, stato),
+       referente = case when $10::text is null then referente
+                        when $10 = '' then null else $10 end,
+       referente_telefono = case when $11::text is null then referente_telefono
+                                 when $11 = '' then null else $11 end,
        concluso_il = case when $9 = 'concluso' then coalesce(concluso_il, now())
                           when $9 = 'in_corso' then null else concluso_il end,
        aggiornato_il = now()
@@ -269,7 +282,8 @@ api.patch('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
     [req.params.id, testoPulito(req.body?.titolo, 200), testoPulito(req.body?.azienda_id, 40),
      testoPulito(req.body?.cliente_nome, 100), testoPulito(req.body?.cliente_cognome, 100),
      testoPulito(req.body?.cliente_telefono, 40), testoPulito(req.body?.indirizzo, 300),
-     testoPulito(req.body?.note, 4000), stato]
+     testoPulito(req.body?.note, 4000), stato, svuotabile(req.body?.referente, 120),
+     svuotabile(req.body?.referente_telefono, 40)]
   )
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
@@ -475,6 +489,57 @@ api.patch('/foto/:id', richiediLogin, avvolgi(async (req, res) => {
   res.json(foto)
 }))
 
+// Ritocco: il telefono schiarisce la foto e la rimanda su. La foto resta
+// la stessa (stesso posto nell'elenco, stessa didascalia), cambia solo
+// l'immagine; quella vecchia viene buttata dal magazzino.
+api.post('/foto/:id/ritocco/spazio', richiediLogin, avvolgi(async (req, res) => {
+  const foto = await uno('select id, lavoro_id from foto where id = $1', [req.params.id])
+  if (!foto) return res.status(404).json({ errore: 'Foto non trovata' })
+
+  const chiave = nuovaChiave('foto', foto.lavoro_id, 'jpg')
+  const chiaveMini = nuovaChiave('mini', foto.lavoro_id, 'jpg')
+  res.json({
+    chiave,
+    chiave_mini: chiaveMini,
+    url_put: await urlPerCaricare(chiave, 'image/jpeg'),
+    url_put_mini: await urlPerCaricare(chiaveMini, 'image/jpeg')
+  })
+}))
+
+api.post('/foto/:id/ritocco', richiediLogin, avvolgi(async (req, res) => {
+  const vecchia = await uno('select id, lavoro_id, chiave, chiave_mini from foto where id = $1', [req.params.id])
+  if (!vecchia) return res.status(404).json({ errore: 'Foto non trovata' })
+
+  const chiave = testoPulito(req.body?.chiave, 300)
+  const chiaveMini = testoPulito(req.body?.chiave_mini, 300)
+  if (!chiave || !chiave.startsWith(`foto/${vecchia.lavoro_id}/`)) {
+    return res.status(400).json({ errore: 'Riferimento del file non valido' })
+  }
+
+  const foto = await uno(
+    `update foto set chiave = $2, chiave_mini = $3, larghezza = $4, altezza = $5,
+                     byte = $6, ritoccata_il = now(), ritoccata_da = $7
+     where id = $1
+     returning id, lavoro_id, chiave, chiave_mini, didascalia, larghezza, altezza,
+               byte, caricata_il, caricata_da, ritoccata_il`,
+    [vecchia.id, chiave, chiaveMini, Number(req.body?.larghezza) || null,
+     Number(req.body?.altezza) || null, Number(req.body?.byte) || null, req.utente.id]
+  )
+
+  // Le vecchie immagini non servono piu' a nessuno: via dal magazzino.
+  await elimina(vecchia.chiave)
+  if (vecchia.chiave_mini) await elimina(vecchia.chiave_mini)
+  await q('update lavori set aggiornato_il = now() where id = $1', [foto.lavoro_id])
+
+  const completa = {
+    ...foto,
+    url_mini: await urlPerVedere(foto.chiave_mini || foto.chiave),
+    url: await urlPerVedere(foto.chiave)
+  }
+  await pubblica('foto_aggiornata', { lavoroId: foto.lavoro_id, utenteId: req.utente.id, payload: completa })
+  res.json(completa)
+}))
+
 api.delete('/foto/:id', richiediLogin, avvolgi(async (req, res) => {
   const foto = await uno('select id, lavoro_id, chiave, chiave_mini, caricata_da from foto where id = $1', [req.params.id])
   if (!foto) return res.status(404).json({ errore: 'Foto non trovata' })
@@ -569,7 +634,7 @@ export async function resocontoPubblico (token) {
   if (!condivisione) return null
 
   const lavoro = await uno(
-    `select l.titolo, l.cliente_nome, l.cliente_cognome, l.indirizzo, l.stato,
+    `select l.titolo, l.cliente_nome, l.cliente_cognome, l.indirizzo, l.stato, l.referente,
             to_char(l.data_lavoro, 'YYYY-MM-DD') as data_lavoro,
             to_char(l.ora_lavoro, 'HH24:MI') as ora_lavoro,
             a.nome as azienda_nome

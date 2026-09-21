@@ -100,6 +100,20 @@ const PASSI = [
       );
       create index if not exists note_utente_idx on note (utente_id, fatta, creata_il desc);
     `
+  },
+  {
+    nome: 'referente dell\'azienda sul lavoro',
+    sql: `
+      alter table lavori add column if not exists referente text;
+      alter table lavori add column if not exists referente_telefono text;
+    `
+  },
+  {
+    nome: 'ritocco delle foto',
+    sql: `
+      alter table foto add column if not exists ritoccata_da uuid references utenti(id) on delete set null;
+      alter table foto add column if not exists ritoccata_il timestamptz;
+    `
   }
 ]
 

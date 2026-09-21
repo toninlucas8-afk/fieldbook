@@ -25,6 +25,7 @@ export function paginaResoconto ({ lavoro, foto, firme, daFare }) {
   const righe = [
     cliente && ['Cliente', cliente],
     lavoro.indirizzo && ['Indirizzo', lavoro.indirizzo],
+    lavoro.referente && ['Progetto di', lavoro.referente],
     giorno && ['Giorno', giorno + (lavoro.ora_lavoro ? `, ore ${lavoro.ora_lavoro}` : '')],
     ['Stato', lavoro.stato === 'concluso' ? 'Concluso' : 'In corso']
   ].filter(Boolean)

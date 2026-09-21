@@ -8,7 +8,8 @@ export default function NuovoLavoro ({ utente, indietro, quandoCreato }) {
   const [squadra, setSquadra] = useState(() => new Set([utente.id]))
   const [dati, setDati] = useState({
     titolo: '', azienda_id: '', cliente_nome: '', cliente_cognome: '',
-    cliente_telefono: '', indirizzo: '', note: '', data_lavoro: '', ora_lavoro: ''
+    cliente_telefono: '', indirizzo: '', referente: '', referente_telefono: '',
+    note: '', data_lavoro: '', ora_lavoro: ''
   })
   const [nuovaAzienda, setNuovaAzienda] = useState('')
   const [errore, setErrore] = useState('')
@@ -90,6 +91,18 @@ export default function NuovoLavoro ({ utente, indietro, quandoCreato }) {
               <button type="button" className="bottone chiaro piccolo" onClick={aggiungiAzienda}>Aggiungi</button>
             </div>
           )}
+
+          <div className="campo" style={{ marginTop: 13 }}>
+            <label htmlFor="referente">Chi ha fatto il progetto</label>
+            <input id="referente" value={dati.referente} onChange={cambia('referente')}
+              placeholder="La persona dell'azienda" />
+          </div>
+
+          <div className="campo" style={{ marginBottom: 0 }}>
+            <label htmlFor="tel-ref">Suo telefono</label>
+            <input id="tel-ref" type="tel" inputMode="tel"
+              value={dati.referente_telefono} onChange={cambia('referente_telefono')} />
+          </div>
         </div>
 
         <div className="carta">
