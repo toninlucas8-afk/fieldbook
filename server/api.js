@@ -62,6 +62,31 @@ api.put('/io/preferenze', richiediLogin, avvolgi(async (req, res) => {
   res.json(riga.preferenze)
 }))
 
+/* ------------------------------------------------------------- il gioco */
+
+// Il record di ognuno sta sull'account, cosi' non si perde cambiando
+// telefono e si puo' fare la classifica della squadra.
+api.post('/gioco/punteggio', richiediLogin, avvolgi(async (req, res) => {
+  const punti = Math.max(0, Math.min(99999, Math.round(Number(req.body?.punti) || 0)))
+  const prima = Number(req.utente.preferenze?.snake_record || 0)
+  if (punti <= prima) return res.json({ record: prima, nuovo: false })
+
+  const dopo = { ...(req.utente.preferenze || {}), snake_record: punti }
+  await q('update utenti set preferenze = $2 where id = $1', [req.utente.id, JSON.stringify(dopo)])
+  res.json({ record: punti, nuovo: true })
+}))
+
+api.get('/gioco/classifica', richiediLogin, avvolgi(async (req, res) => {
+  const righe = await q(
+    `select id, nome, (preferenze->>'snake_record')::int as record
+       from utenti
+      where attivo and (preferenze->>'snake_record')::int > 0
+      order by record desc, nome
+      limit 8`
+  )
+  res.json(righe.map((r) => ({ ...r, io: r.id === req.utente.id })))
+}))
+
 api.post('/io/pin', richiediLogin, avvolgi(async (req, res) => {
   await cambiaPin(req.utente.id, req.body?.pin)
   res.json({ ok: true, avviso: 'PIN cambiato. Devi rientrare su tutti i tuoi telefoni.' })

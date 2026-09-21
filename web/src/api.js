@@ -64,6 +64,8 @@ export const api = {
   // Tutto quello che serve alla schermata di apertura, in una volta sola.
   riassunto: (oggi) => get(`/riassunto?oggi=${encodeURIComponent(oggi)}`),
   salvaPreferenze: (dati) => chiamata('/io/preferenze', { method: 'PUT', body: JSON.stringify(dati) }),
+  salvaPunteggio: (punti) => post('/gioco/punteggio', { punti }),
+  classifica: () => get('/gioco/classifica'),
 
   // Blocco note personale.
   note: () => get('/note'),
