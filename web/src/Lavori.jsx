@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { accendiAvvisi, api, avvisiAttivi, avvisiPossibili, spegniAvvisi } from './api.js'
+import { api } from './api.js'
+import Barra from './Barra.jsx'
+import Menu from './Menu.jsx'
 import { ascoltaCoda, svuotaCoda } from './coda.js'
 import { giornoISO, iniziali, nomeCliente, piuGiorni, quando, quandoLavoro, titoloGiorno } from './utili.js'
 
@@ -10,9 +12,17 @@ const VISTE = [
   { id: 'tutti', testo: 'Tutti' }
 ]
 
-export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriSquadra, esci, segnale }) {
-  const [vista, setVista] = useState('oggi')
-  const [soloMiei, setSoloMiei] = useState(() => localStorage.getItem('fb-solo-miei') === '1')
+export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriSquadra, esci, segnale, vaiA, vistaIniziale, ricordaVista }) {
+  // Arrivando da un riquadro della schermata di apertura si parte gia'
+  // filtrati su quello che il riquadro contava; tornando da un lavoro si
+  // ritrova il filtro che c'era.
+  const partenza = typeof vistaIniziale === 'string' ? { vista: vistaIniziale } : (vistaIniziale || {})
+  const [vista, setVista] = useState(partenza.vista === 'miei' ? 'da_fare' : (partenza.vista || 'oggi'))
+  const [soloMiei, setSoloMiei] = useState(() => (
+    partenza.miei !== undefined
+      ? partenza.miei
+      : partenza.vista === 'miei' || localStorage.getItem('fb-solo-miei') === '1'
+  ))
   const [cerca, setCerca] = useState('')
   const [lavori, setLavori] = useState([])
   const [caricando, setCaricando] = useState(true)
@@ -22,6 +32,9 @@ export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriS
   const [coda, setCoda] = useState({ totali: 0 })
 
   useEffect(() => ascoltaCoda(setCoda), [])
+
+  // Uscendo su un lavoro e tornando indietro si ritrova il filtro di prima.
+  useEffect(() => { ricordaVista?.({ vista, miei: soloMiei }) }, [vista, soloMiei, ricordaVista])
 
   // Cercando si guarda in tutto l'archivio: filtrare per giorno darebbe
   // "non trovato" su un lavoro che invece c'e'.
@@ -74,15 +87,12 @@ export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriS
       <header className="testata">
         <h1>
           Lavori
-          <span className="sotto">Ciao {utente.nome.split(' ')[0]}</span>
+          <span className="sotto">{lavori.length === 1 ? '1 lavoro' : `${lavori.length} lavori`}</span>
         </h1>
-        {utente.ruolo === 'admin' && (
-          <button className="azione-testata" onClick={apriSquadra}>Squadra</button>
-        )}
         <button className="azione-testata" onClick={() => setMenu(true)} aria-label="Altro">⋯</button>
       </header>
 
-      <div className="contenuto">
+      <div className="contenuto con-barra">
         <div className="cerca">
           <input
             value={cerca} onChange={(e) => setCerca(e.target.value)}
@@ -166,88 +176,19 @@ export default function Lavori ({ utente, apriLavoro, apriNote, apriNuovo, apriS
             ))}
       </div>
 
-      <div className="barra-azione">
+      <div className="barra-azione sopra-barra">
         <button className="bottone arancio" onClick={apriNuovo}>+ Nuovo lavoro</button>
       </div>
 
+      <Barra dove="lavori" vaiA={vaiA} />
+
       {menu && (
-        <div className="foglio-sfondo" onClick={() => setMenu(false)}>
-          <div className="foglio" onClick={(e) => e.stopPropagation()}>
-            <h2>{utente.nome}</h2>
-            <Avvisi />
-            <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={() => { setMenu(false); apriNote() }}>
-              📝 Il mio blocco note
-            </button>
-            <button className="bottone chiaro" style={{ marginBottom: 10 }} onClick={() => { setMenu(false); apriSquadra('mio-pin') }}>
-              Cambia il mio PIN
-            </button>
-            <button className="bottone pericolo" onClick={esci}>Esci da questo telefono</button>
-          </div>
-        </div>
+        <Menu
+          utente={utente} chiudi={() => setMenu(false)}
+          apriNote={apriNote} apriSquadra={apriSquadra} esci={esci}
+        />
       )}
     </>
-  )
-}
-
-// Gli avvisi si accendono su ogni telefono separatamente: e' il telefono
-// che si iscrive, non la persona.
-function Avvisi () {
-  const [stato, setStato] = useState('controllo')
-  const [messaggio, setMessaggio] = useState('')
-  const [attesa, setAttesa] = useState(false)
-
-  useEffect(() => {
-    if (!avvisiPossibili()) return setStato('impossibili')
-    avvisiAttivi().then((si) => setStato(si ? 'accesi' : 'spenti')).catch(() => setStato('spenti'))
-  }, [])
-
-  async function accendi () {
-    setAttesa(true); setMessaggio('')
-    try {
-      await accendiAvvisi()
-      setStato('accesi')
-      setMessaggio('Avvisi accesi su questo telefono.')
-    } catch (e) { setMessaggio(e.message) } finally { setAttesa(false) }
-  }
-
-  async function prova () {
-    setAttesa(true); setMessaggio('')
-    try {
-      const esito = await api.provaAvvisi()
-      setMessaggio(esito.inviati > 0 ? 'Avviso di prova mandato.' : 'Nessun telefono iscritto: prova a riaccenderli.')
-    } catch (e) { setMessaggio(e.message) } finally { setAttesa(false) }
-  }
-
-  async function spegni () {
-    setAttesa(true); setMessaggio('')
-    try {
-      await spegniAvvisi()
-      setStato('spenti')
-      setMessaggio('Avvisi spenti su questo telefono.')
-    } catch (e) { setMessaggio(e.message) } finally { setAttesa(false) }
-  }
-
-  if (stato === 'controllo') return null
-  if (stato === 'impossibili') {
-    return <p className="riga-vuota">Questo telefono non sa mostrare gli avvisi.</p>
-  }
-
-  return (
-    <div style={{ marginBottom: 10 }}>
-      {stato === 'spenti'
-        ? (
-          <button className="bottone chiaro" onClick={accendi} disabled={attesa}>
-            🔔 Attiva gli avvisi su questo telefono
-          </button>
-          )
-        : (
-          <div className="due">
-            <button className="bottone chiaro piccolo" onClick={prova} disabled={attesa}>Mandami una prova</button>
-            <button className="bottone chiaro piccolo" onClick={spegni} disabled={attesa}>Spegni gli avvisi</button>
-          </div>
-          )}
-      {messaggio && <small style={{ display: 'block', marginTop: 8, color: 'var(--testo-tenue)' }}>{messaggio}</small>}
-    </div>
   )
 }
 

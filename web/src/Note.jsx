@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api.js'
+import Barra from './Barra.jsx'
 import { quando } from './utili.js'
 
 // Il blocco note e' personale: le cose da ricordare che non stanno su un
 // lavoro in particolare. Non lo vede nessun altro, nemmeno l'admin.
-export default function Note ({ indietro }) {
+export default function Note ({ vaiA }) {
   const [note, setNote] = useState([])
   const [caricando, setCaricando] = useState(true)
   const [errore, setErrore] = useState('')
@@ -104,14 +105,13 @@ export default function Note ({ indietro }) {
   return (
     <>
       <header className="testata">
-        <button className="indietro" onClick={indietro} aria-label="Indietro">‹</button>
         <h1>
           Blocco note
           <span className="sotto">Solo tuo: non lo vede nessun altro</span>
         </h1>
       </header>
 
-      <div className="contenuto">
+      <div className="contenuto con-barra">
         {errore && <div className="errore">{errore}</div>}
 
         {caricando
@@ -150,7 +150,7 @@ export default function Note ({ indietro }) {
               )}
       </div>
 
-      <div className="barra-azione">
+      <div className="barra-azione sopra-barra">
         <form className="nuova-nota" onSubmit={aggiungi}>
           <input
             ref={campo} value={testo} onChange={(e) => setTesto(e.target.value)} maxLength={2000}
@@ -161,6 +161,8 @@ export default function Note ({ indietro }) {
           </button>
         </form>
       </div>
+
+      <Barra dove="note" vaiA={vaiA} />
     </>
   )
 }

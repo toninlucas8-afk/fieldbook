@@ -1,6 +1,6 @@
 // Service worker minimo: serve a rendere Fieldbook installabile sul telefono
 // e a farla aprire anche quando la linea e' pessima.
-const CACHE = 'fieldbook-v5'
+const CACHE = 'fieldbook-v6'
 const GUSCIO = ['/', '/index.html', '/manifest.webmanifest', '/icona.svg']
 
 self.addEventListener('install', (e) => {

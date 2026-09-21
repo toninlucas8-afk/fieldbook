@@ -351,3 +351,83 @@ a { color: inherit; }
 .barra-azione .nuova-nota { width: 100%; }
 .barra-azione .nuova-nota input { background: var(--carta); min-height: 52px; }
 .barra-azione .nuova-nota .bottone { width: auto; flex: none; }
+
+/* ------------------------------------------------- casa, lavori e note */
+
+/* La barra in basso con le tre sezioni. */
+.barra-sotto {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; background: var(--carta); border-top: 1px solid var(--bordo);
+  padding-bottom: var(--sicuro-sotto);
+}
+.barra-sotto button {
+  flex: 1; padding: 8px 4px 9px; display: grid; gap: 2px; justify-items: center;
+  font-size: 11.5px; font-weight: 600; color: var(--testo-tenue);
+}
+.barra-sotto .segno { font-size: 19px; line-height: 1.15; filter: grayscale(1); opacity: .65; }
+.barra-sotto button[aria-current="page"] { color: var(--scuro); }
+.barra-sotto button[aria-current="page"] .segno { filter: none; opacity: 1; }
+
+.contenuto.con-barra { padding-bottom: calc(176px + var(--sicuro-sotto)); }
+.barra-azione.sopra-barra { bottom: calc(60px + var(--sicuro-sotto)); }
+
+/* I tre numeri in fila sulla schermata di apertura. */
+.numeri { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.riquadro {
+  background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio);
+  padding: 12px 8px; display: grid; gap: 2px; text-align: center;
+}
+.riquadro .segno { font-size: 15px; line-height: 1; }
+.riquadro strong { font-size: 24px; font-weight: 700; }
+.riquadro span { font-size: 11.5px; color: var(--testo-tenue); line-height: 1.25; }
+.riquadro.attenzione strong { color: var(--arancio); }
+
+/* Il riquadro grande di oggi: scuro come la testata, cosi' si vede subito
+   qual e' la cosa importante della schermata. */
+.carta.oggi {
+  background: linear-gradient(160deg, #22395a, #101d30);
+  border: 0; color: #fff; padding-bottom: 4px;
+}
+.carta.oggi h2 { margin: 0 0 6px; font-size: 14px; letter-spacing: .2px; opacity: .8; font-weight: 600; }
+.carta.oggi.vuota { padding-bottom: 14px; }
+.carta.oggi.vuota p { margin: 0 0 12px; color: #c7d2e1; }
+.carta.oggi .bottone.chiaro { background: rgba(255,255,255,.14); border-color: transparent; color: #fff; }
+.riga-oggi {
+  width: 100%; display: flex; align-items: flex-start; gap: 12px; text-align: left;
+  padding: 12px 0; border-top: 1px solid rgba(255,255,255,.13); color: #fff;
+}
+.riga-oggi .ora { font-weight: 700; color: var(--arancio); min-width: 46px; }
+.riga-oggi .corpo { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.riga-oggi .corpo strong { font-size: 15.5px; }
+.riga-oggi .corpo small { color: #b8c5d6; font-size: 12.5px; }
+
+/* I prossimi giorni, in riga corta. */
+.elenco-prossimi { padding: 2px 14px; }
+.elenco-prossimi button {
+  width: 100%; text-align: left; padding: 11px 0; display: grid; gap: 1px;
+  border-top: 1px solid var(--bordo);
+}
+.elenco-prossimi button:first-child { border-top: 0; }
+.elenco-prossimi .giorno-corto { font-size: 12.5px; font-weight: 700; color: var(--arancio); }
+.elenco-prossimi .titolo { font-weight: 600; }
+.elenco-prossimi small { color: var(--testo-tenue); font-size: 12.5px; }
+
+/* Le ultime foto, da scorrere di lato. */
+.striscia-foto { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.striscia-foto::-webkit-scrollbar { display: none; }
+.striscia-foto button { flex: none; }
+.striscia-foto img {
+  width: 92px; height: 92px; object-fit: cover; border-radius: 12px;
+  border: 1px solid var(--bordo); background: #e7ebf1; display: block;
+}
+
+/* Le prime righe del blocco note. */
+.note-sintesi { display: block; width: 100%; text-align: left; }
+.note-sintesi ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.note-sintesi li { display: flex; gap: 9px; align-items: flex-start; font-size: 14.5px; }
+.note-sintesi li::before {
+  content: ''; flex: none; width: 15px; height: 15px; margin-top: 3px;
+  border: 2px solid var(--bordo); border-radius: 5px;
+}
+.note-sintesi small { display: block; margin-top: 8px; color: var(--testo-tenue); }
+.avviso.in-ritardo { display: block; width: 100%; text-align: left; }

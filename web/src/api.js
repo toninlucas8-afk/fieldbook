@@ -61,6 +61,9 @@ export const api = {
 
   colleghi: () => get('/colleghi'),
 
+  // Tutto quello che serve alla schermata di apertura, in una volta sola.
+  riassunto: (oggi) => get(`/riassunto?oggi=${encodeURIComponent(oggi)}`),
+
   // Blocco note personale.
   note: () => get('/note'),
   creaNota: (testo) => post('/note', { testo }),

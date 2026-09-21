@@ -783,6 +783,68 @@ api.delete('/annotazioni/:id', richiediLogin, avvolgi(async (req, res) => {
   res.json({ ok: true })
 }))
 
+/* ------------------------------------------------------------- riassunto */
+
+// Tutto quello che serve alla schermata di apertura, in una chiamata sola:
+// il telefono la apre appena entra e non deve aspettare cinque risposte.
+// Il giorno arriva dal telefono, perche' il server lavora in orario di
+// Londra e in Italia sarebbe il giorno sbagliato per un'ora.
+api.get('/riassunto', richiediLogin, avvolgi(async (req, res) => {
+  const oggi = giorno(req.query?.oggi) || null
+
+  const [dioggi, prossimi, conti, note, ultimeFoto] = await Promise.all([
+    oggi
+      ? q(`${SELECT_LAVORO} where l.data_lavoro = $1::date
+           order by l.ora_lavoro nulls last, l.titolo`, [oggi])
+      : Promise.resolve([]),
+    oggi
+      ? q(`${SELECT_LAVORO} where l.data_lavoro > $1::date and l.stato = 'in_corso'
+           order by l.data_lavoro, l.ora_lavoro nulls last limit 6`, [oggi])
+      : Promise.resolve([]),
+    uno(
+      `select
+         (select count(*) from lavori where stato = 'in_corso')::int as in_corso,
+         (select count(*) from annotazioni an
+            join lavori l on l.id = an.lavoro_id
+           where not an.fatta and l.stato = 'in_corso')::int as da_fare,
+         (select count(*) from lavori
+           where stato = 'in_corso' and data_lavoro is not null
+             and ($1::date is null or data_lavoro < $1::date))::int as in_ritardo,
+         (select count(*) from assegnazioni asg
+            join lavori l on l.id = asg.lavoro_id
+           where asg.utente_id = $2 and l.stato = 'in_corso')::int as miei`,
+      [oggi, req.utente.id]
+    ),
+    q(`select id, testo from note where utente_id = $1 and not fatta
+        order by creata_il desc limit 3`, [req.utente.id]),
+    q(`select f.id, f.chiave, f.chiave_mini, f.lavoro_id, l.titolo as lavoro_titolo
+         from foto f join lavori l on l.id = f.lavoro_id
+        order by f.caricata_il desc limit 8`)
+  ])
+
+  const noteAperte = await uno(
+    'select count(*)::int as quante from note where utente_id = $1 and not fatta',
+    [req.utente.id]
+  )
+
+  const conCopertina = (righe) => Promise.all(righe.map(async (r) => ({
+    ...r, copertina_url: await urlPerVedere(r.copertina_chiave)
+  })))
+
+  res.json({
+    oggi: await conCopertina(dioggi),
+    prossimi: await conCopertina(prossimi),
+    ...conti,
+    note: { quante: noteAperte.quante, prime: note },
+    ultime_foto: await Promise.all(ultimeFoto.map(async (f) => ({
+      id: f.id,
+      lavoro_id: f.lavoro_id,
+      lavoro_titolo: f.lavoro_titolo,
+      url_mini: await urlPerVedere(f.chiave_mini || f.chiave)
+    })))
+  })
+}))
+
 /* ------------------------------------------------------- blocco note mio */
 
 // Il blocco note e' personale: ognuno vede e tocca solo il proprio.

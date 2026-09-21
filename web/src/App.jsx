@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { api, ascoltaEventi } from './api.js'
 import { aggiornaConto, svuotaCoda } from './coda.js'
 import Accesso from './Accesso.jsx'
+import Home from './Home.jsx'
 import Lavori from './Lavori.jsx'
+import Menu from './Menu.jsx'
 import Lavoro from './Lavoro.jsx'
 import Note from './Note.jsx'
 import NuovoLavoro from './NuovoLavoro.jsx'
@@ -14,8 +16,10 @@ export default function App () {
   // Toccando un avviso il telefono apre /?lavoro=<id>: si va dritti li'.
   const [schermata, setSchermata] = useState(() => {
     const id = new URLSearchParams(location.search).get('lavoro')
-    return id ? { nome: 'lavoro', id } : { nome: 'lavori' }
+    return id ? { nome: 'lavoro', id } : { nome: 'home' }
   })
+  const [menu, setMenu] = useState(false)
+  const [vistaLavori, setVistaLavori] = useState(null)
   const [segnale, setSegnale] = useState(null)
 
   // Ripulisce l'indirizzo dopo essere arrivati da un avviso, cosi' un
@@ -52,10 +56,10 @@ export default function App () {
     }
   }, [utente])
 
-  // Il tasto "indietro" del telefono chiude la schermata, non l'app.
+  // Il tasto "indietro" del telefono riporta a casa, non chiude l'app.
   useEffect(() => {
-    const torna = () => setSchermata({ nome: 'lavori' })
-    if (schermata.nome !== 'lavori') {
+    const torna = () => setSchermata({ nome: 'home' })
+    if (schermata.nome !== 'home') {
       history.pushState({ fb: true }, '')
       window.addEventListener('popstate', torna)
       return () => window.removeEventListener('popstate', torna)
@@ -63,44 +67,81 @@ export default function App () {
   }, [schermata.nome])
 
   const vaiA = (nome, extra = {}) => setSchermata({ nome, ...extra })
-  const aiLavori = () => setSchermata({ nome: 'lavori' })
+  const aCasa = () => setSchermata({ nome: 'home' })
 
   async function esci () {
     await api.esci().catch(() => {})
     setUtente(null)
-    aiLavori()
+    aCasa()
   }
+
+  // Le tre sezioni con la barra in basso: casa, lavori, blocco note.
+  const sezione = (nome) => vaiA(nome)
 
   if (!controllato) return <div className="vuoto" style={{ paddingTop: '38vh' }}>Apro Fieldbook…</div>
-  if (!utente) return <Accesso quandoEntra={(u) => { setUtente(u); aiLavori() }} />
+  if (!utente) return <Accesso quandoEntra={(u) => { setUtente(u); aCasa() }} />
 
-  switch (schermata.nome) {
-    case 'lavoro':
-      return <Lavoro id={schermata.id} utente={utente} indietro={aiLavori} segnale={segnale} />
+  const apriSquadra = (modo) => vaiA('squadra', { mioPin: modo === 'mio-pin' })
 
-    case 'nuovo':
-      return (
-        <NuovoLavoro
-          utente={utente} indietro={aiLavori}
-          quandoCreato={(id) => vaiA('lavoro', { id })}
-        />
-      )
+  const schermo = () => {
+    switch (schermata.nome) {
+      case 'lavoro':
+        return (
+          <Lavoro
+            id={schermata.id} utente={utente} segnale={segnale}
+            indietro={() => vaiA(schermata.da || 'home', schermata.da === 'lavori' ? { vista: vistaLavori } : {})}
+          />
+        )
 
-    case 'note':
-      return <Note indietro={aiLavori} />
+      case 'nuovo':
+        return (
+          <NuovoLavoro
+            utente={utente} indietro={aCasa}
+            quandoCreato={(id) => vaiA('lavoro', { id })}
+          />
+        )
 
-    case 'squadra':
-      return <Squadra utente={utente} indietro={aiLavori} apriSubitoMioPin={schermata.mioPin} />
+      case 'note':
+        return <Note vaiA={sezione} />
 
-    default:
-      return (
-        <Lavori
-          utente={utente} segnale={segnale} esci={esci}
-          apriLavoro={(id) => vaiA('lavoro', { id })}
-          apriNuovo={() => vaiA('nuovo')}
-          apriSquadra={(modo) => vaiA('squadra', { mioPin: modo === 'mio-pin' })}
-          apriNote={() => vaiA('note')}
-        />
-      )
+      case 'squadra':
+        return <Squadra utente={utente} indietro={aCasa} apriSubitoMioPin={schermata.mioPin} />
+
+      case 'lavori':
+        return (
+          <Lavori
+            utente={utente} segnale={segnale} esci={esci} vaiA={sezione}
+            vistaIniziale={schermata.vista} ricordaVista={setVistaLavori}
+            apriLavoro={(id) => vaiA('lavoro', { id, da: 'lavori' })}
+            apriNuovo={() => vaiA('nuovo')}
+            apriSquadra={apriSquadra}
+            apriNote={() => vaiA('note')}
+          />
+        )
+
+      default:
+        return (
+          <Home
+            utente={utente} segnale={segnale} vaiA={sezione}
+            apriLavoro={(id) => vaiA('lavoro', { id })}
+            apriNuovo={() => vaiA('nuovo')}
+            apriNote={() => vaiA('note')}
+            apriLavori={(vista) => vaiA('lavori', { vista })}
+            apriMenu={() => setMenu(true)}
+          />
+        )
+    }
   }
+
+  return (
+    <>
+      {schermo()}
+      {menu && (
+        <Menu
+          utente={utente} chiudi={() => setMenu(false)}
+          apriNote={() => vaiA('note')} apriSquadra={apriSquadra} esci={esci}
+        />
+      )}
+    </>
+  )
 }
