@@ -484,6 +484,7 @@ a { color: inherit; }
 /* ------------------------------------------------------- il gioco nascosto */
 
 .gioco {
+  position: relative; overflow: hidden;
   background: #0b1220; border-radius: var(--raggio); padding: 12px;
   margin-bottom: 12px; color: #fff;
 }
@@ -551,6 +552,26 @@ a { color: inherit; }
 }
 .gioco.grande .testa-gioco { padding-top: env(safe-area-inset-top, 0px); }
 .gioco.grande .campo { flex: 1; align-items: center; padding-bottom: calc(18px + var(--sicuro-sotto)); }
+
+/* Il vecchio con i baffi bianchi: sbuca dal basso, dice la sua e torna giu'. */
+.vecchio {
+  position: absolute; left: 14px; right: 14px; bottom: 0; z-index: 3;
+  display: flex; align-items: flex-end; gap: 10px; pointer-events: none;
+  transform: translateY(100%);
+  transition: transform .42s cubic-bezier(.2, .9, .3, 1.25);
+}
+.vecchio.su { transform: translateY(9%); }
+.vecchio svg { flex: none; filter: drop-shadow(0 6px 14px rgba(0,0,0,.55)); }
+.vecchio .fumetto {
+  margin: 0 0 20px; max-width: 220px;
+  background: #fff; color: #17202e; font-size: 13px; line-height: 1.35;
+  padding: 9px 12px; border-radius: 13px; border-bottom-left-radius: 3px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.45);
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .2s ease .16s, transform .2s ease .16s;
+}
+.vecchio.su .fumetto { opacity: 1; transform: none; }
+.vecchio.boss .fumetto { background: var(--arancio); color: #1b1200; font-weight: 600; }
 
 /* La scelta dei riquadri. */
 .foglio.alto { max-height: 86vh; overflow-y: auto; }

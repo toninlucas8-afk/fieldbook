@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api.js'
 import { verso as suonaVerso } from './suono.js'
+import Vecchio from './Vecchio.jsx'
+import { battutaACaso, frecciata, SOGLIE } from './battute.js'
 
 // Il serpente: il gioco nascosto dell'app. Si guida col dito, trascinando
 // sul campo; non ci sono tasti finti sullo schermo.
@@ -40,6 +42,7 @@ export default function Snake ({ grande = false, chiudi }) {
   const [stato, setStato] = useState('fermo')     // fermo | gioca | pausa | finita
   const [potere, setPotere] = useState(null)      // { tipo, resta }
   const [classifica, setClassifica] = useState([])
+  const [battuta, setBattuta] = useState(null)   // quello che dice il vecchio
 
   const nuovaPartita = useCallback(() => {
     partita.current = {
@@ -54,11 +57,13 @@ export default function Snake ({ grande = false, chiudi }) {
       turboFino: 0,
       stellaFino: 0,
       briciole: [],
-      volanti: []
+      volanti: [],
+      dette: []
     }
     punteggio.current = 0
     setPunti(0)
     setPotere(null)
+    setBattuta(null)
     setStato('gioca')
   }, [])
 
@@ -299,6 +304,13 @@ export default function Snake ({ grande = false, chiudi }) {
       p.volanti.push({ x: m.x, y: m.y, testo: `+${presi}`, colore: tipo.colore, nato: ora })
       suonaVerso(p.cibo.tipo)
 
+      // passata una certa soglia il vecchio smette di sfottere
+      const soglia = [...SOGLIE].reverse().find((sg) => punteggio.current >= sg.punti && !p.dette.includes(sg.punti))
+      if (soglia) {
+        p.dette.push(soglia.punti)
+        setBattuta({ testo: soglia.testo, tono: 'boss' })
+      }
+
       nuovoCibo(p, ora)
     }
 
@@ -380,6 +392,7 @@ export default function Snake ({ grande = false, chiudi }) {
   useEffect(() => {
     if (stato !== 'finita') return
     const fatti = punteggio.current
+    setBattuta(frecciata(fatti))
     if (fatti > leggiRecord()) {
       try { localStorage.setItem(RECORD, String(fatti)) } catch { /* modalita' anonima */ }
       setRecord(fatti)
@@ -388,6 +401,28 @@ export default function Snake ({ grande = false, chiudi }) {
       .then((r) => setRecord((vecchio) => Math.max(vecchio, r.record)))
       .catch(() => {})
       .finally(() => api.classifica().then(setClassifica).catch(() => {}))
+  }, [stato])
+
+  // Ogni tanto, mentre si gioca, il vecchio esce e dice la sua.
+  useEffect(() => {
+    if (stato !== 'gioca') return
+    let vivo = true
+    let esce, rientra
+
+    const giroBattute = () => {
+      esce = setTimeout(() => {
+        if (!vivo) return
+        setBattuta({ testo: battutaACaso(), tono: 'normale' })
+        rientra = setTimeout(() => {
+          if (!vivo) return
+          setBattuta(null)
+          giroBattute()
+        }, 4800)
+      }, 9000 + Math.random() * 9000)
+    }
+    giroBattute()
+
+    return () => { vivo = false; clearTimeout(esce); clearTimeout(rientra) }
   }, [stato])
 
   useEffect(() => {
@@ -483,6 +518,8 @@ export default function Snake ({ grande = false, chiudi }) {
         )}
         </div>
       </div>
+
+      <Vecchio battuta={battuta} />
     </div>
   )
 }
