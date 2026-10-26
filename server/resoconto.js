@@ -55,6 +55,7 @@ export function paginaResoconto ({ lavoro, foto, firme, daFare }) {
   .foto { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
   .foto a { display:block; }
   .foto img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; display:block; background:#e7ebf1; }
+  .foto video { width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; display:block; background:#0b1220; }
   .foto figure { margin:0; }
   .foto figcaption { font-size:12.5px; color:var(--tenue); margin-top:4px; }
   ul { margin:0; padding-left:20px; }
@@ -89,13 +90,16 @@ export function paginaResoconto ({ lavoro, foto, firme, daFare }) {
          <div class="scheda"><ul>${daFare.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`
       : ''}
 
-    <h2>Foto del lavoro (${foto.length})</h2>
+    <h2>Foto e video del lavoro (${foto.length})</h2>
     ${foto.length
       ? `<div class="foto">${foto.map((f) => `
           <figure>
-            <a href="${esc(f.piena)}" target="_blank" rel="noreferrer">
-              <img src="${esc(f.mini)}" alt="${esc(f.didascalia || '')}" loading="lazy">
-            </a>
+            ${f.tipo === 'video'
+              ? `<video src="${esc(f.piena)}" ${f.mini ? `poster="${esc(f.mini)}"` : ''}
+                        controls playsinline preload="none"></video>`
+              : `<a href="${esc(f.piena)}" target="_blank" rel="noreferrer">
+                   <img src="${esc(f.mini)}" alt="${esc(f.didascalia || '')}" loading="lazy">
+                 </a>`}
             ${f.didascalia ? `<figcaption>${esc(f.didascalia)}</figcaption>` : ''}
           </figure>`).join('')}</div>`
       : '<div class="scheda">Nessuna foto.</div>'}

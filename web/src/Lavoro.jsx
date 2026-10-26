@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, caricaDocumento } from './api.js'
 import Firma from './Firma.jsx'
 import Visore from './Foto.jsx'
-import { ascoltaCoda, mandaFotoOAccoda, svuotaCoda } from './coda.js'
-import { dataEstesa, iniziali, linkMappe, nomeCliente, peso, quando, soloData } from './utili.js'
+import { ascoltaCoda, mandaFotoOAccoda, mandaVideoOAccoda, svuotaCoda } from './coda.js'
+import { preparaVideo, SECONDI_MAX } from './video.js'
+import { dataEstesa, durataBreve, iniziali, linkMappe, nomeCliente, peso, quando, soloData } from './utili.js'
 
 export default function Lavoro ({ id, utente, indietro, segnale }) {
   const [lavoro, setLavoro] = useState(null)
   const [errore, setErrore] = useState('')
-  const [invio, setInvio] = useState(null)      // { fatte, totali }
+  const [invio, setInvio] = useState(null)      // { fatte, totali, video, pronto }
+  const [avvisoVideo, setAvvisoVideo] = useState('')        // avvisi buoni, tipo "video accorciato"
   const [aperta, setAperta] = useState(null)    // quale foto e' aperta nel visore
   const [menu, setMenu] = useState(false)
   const [nuove, setNuove] = useState(() => new Set())
@@ -23,6 +25,7 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
 
   const inputFoto = useRef(null)
   const inputFotocamera = useRef(null)
+  const inputVideocamera = useRef(null)
   const inputDoc = useRef(null)
 
   const segnala = useCallback((e) => setErrore(e.message), [])
@@ -50,14 +53,32 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
     const scelti = Array.from(file || [])
     if (!scelti.length) return
     setErrore('')
+    setAvvisoVideo('')
     setInvio({ fatte: 0, totali: scelti.length })
 
     for (let i = 0; i < scelti.length; i++) {
+      const uno = scelti[i]
+      const eVideo = (uno.type || '').startsWith('video/')
       try {
-        // Senza campo la foto non si perde: resta sul telefono e parte dopo.
-        await mandaFotoOAccoda(id, scelti[i])
+        if (eVideo) {
+          // Il video si rifa' piu' leggero qui sul telefono: ci mette quanto
+          // dura il filmato, quindi si vede la barra che avanza.
+          setInvio({ fatte: i, totali: scelti.length, video: true, pronto: 0 })
+          const pronto = await preparaVideo(uno, (q) => {
+            setInvio((v) => (v ? { ...v, pronto: q } : v))
+          })
+          if (pronto.tagliato) {
+            setAvvisoVideo(`Il video durava ${durataBreve(pronto.durataOriginale)}: ho tenuto i primi ${SECONDI_MAX} secondi.`)
+          }
+          setInvio({ fatte: i, totali: scelti.length, video: true, pronto: 1 })
+          await mandaVideoOAccoda(id, pronto)
+        } else {
+          // Senza campo la foto non si perde: resta sul telefono e parte dopo.
+          setInvio({ fatte: i, totali: scelti.length })
+          await mandaFotoOAccoda(id, uno)
+        }
       } catch (e) {
-        setErrore(`${e.message} (foto ${i + 1} di ${scelti.length})`)
+        setErrore(`${e.message} (${eVideo ? 'video' : 'foto'} ${i + 1} di ${scelti.length})`)
         break
       }
       setInvio({ fatte: i + 1, totali: scelti.length })
@@ -349,15 +370,31 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
 
         {invio && (
           <div className="carta">
-            <strong style={{ fontSize: 14.5 }}>Sto caricando {invio.fatte + 1} di {invio.totali}…</strong>
-            <div className="avanzamento"><div style={{ width: `${(invio.fatte / invio.totali) * 100}%` }} /></div>
-            <small style={{ color: 'var(--testo-tenue)' }}>Puoi restare su questa schermata.</small>
+            <strong style={{ fontSize: 14.5 }}>
+              {invio.video && invio.pronto < 1
+                ? `Preparo il video… ${Math.round((invio.pronto || 0) * 100)}%`
+                : `Sto caricando ${invio.fatte + 1} di ${invio.totali}…`}
+            </strong>
+            <div className="avanzamento">
+              <div style={{
+                width: invio.video && invio.pronto < 1
+                  ? `${(invio.pronto || 0) * 100}%`
+                  : `${(invio.fatte / invio.totali) * 100}%`
+              }} />
+            </div>
+            <small style={{ color: 'var(--testo-tenue)' }}>
+              {invio.video && invio.pronto < 1
+                ? 'Lascia la schermata aperta: il video si alleggerisce qui sul telefono.'
+                : 'Puoi restare su questa schermata.'}
+            </small>
           </div>
         )}
 
+        {avvisoVideo && <div className="avviso">{avvisoVideo}</div>}
+
         {inAttesaQui > 0 && (
           <div className="carta in-attesa">
-            <strong>{inAttesaQui} {inAttesaQui === 1 ? 'foto in attesa' : 'foto in attesa'} di campo</strong>
+            <strong>{inAttesaQui} {inAttesaQui === 1 ? 'file in attesa' : 'file in attesa'} di campo</strong>
             <p>
               Restano su questo telefono e partono da sole appena torna la linea.
               Puoi chiudere l'app.
@@ -369,15 +406,20 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
           </div>
         )}
 
-        <h2 className="titolo-sezione">Foto</h2>
+        <h2 className="titolo-sezione">Foto e video</h2>
 
         {lavoro.foto.length === 0
-          ? <p className="riga-vuota">Ancora nessuna foto. Scattane una con i bottoni qui sotto.</p>
+          ? <p className="riga-vuota">Ancora niente. Scatta una foto o gira un video con i bottoni qui sotto.</p>
           : (
             <div className="griglia-foto">
               {lavoro.foto.map((f, posto) => (
                 <button key={f.id} className={nuove.has(f.id) ? 'nuova' : ''} onClick={() => setAperta(posto)}>
-                  <img src={f.url_mini} alt={f.didascalia || ''} loading="lazy" />
+                  {f.url_mini
+                    ? <img src={f.url_mini} alt={f.didascalia || ''} loading="lazy" />
+                    : <span className="senza-copertina" />}
+                  {f.tipo === 'video' && (
+                    <span className="segno-video">▶ {durataBreve(f.durata)}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -507,6 +549,9 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
         <button className="bottone arancio" onClick={() => inputFotocamera.current.click()} disabled={!!invio}>
           📷 Scatta
         </button>
+        <button className="bottone chiaro" onClick={() => inputVideocamera.current.click()} disabled={!!invio}>
+          🎥 Video
+        </button>
         <button className="bottone chiaro" onClick={() => inputFoto.current.click()} disabled={!!invio}>
           🖼 Galleria
         </button>
@@ -514,7 +559,9 @@ export default function Lavoro ({ id, utente, indietro, segnale }) {
 
       <input ref={inputFotocamera} type="file" accept="image/*" capture="environment" hidden
         onChange={(e) => { mandaFoto(e.target.files); e.target.value = '' }} />
-      <input ref={inputFoto} type="file" accept="image/*" multiple hidden
+      <input ref={inputVideocamera} type="file" accept="video/*" capture="environment" hidden
+        onChange={(e) => { mandaFoto(e.target.files); e.target.value = '' }} />
+      <input ref={inputFoto} type="file" accept="image/*,video/*" multiple hidden
         onChange={(e) => { mandaFoto(e.target.files); e.target.value = '' }} />
       <input ref={inputDoc} type="file" multiple hidden
         onChange={(e) => { mandaDocumento(e.target.files); e.target.value = '' }} />

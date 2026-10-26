@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ritoccaFoto } from './api.js'
-import { peso, quando } from './utili.js'
+import { durataBreve, peso, quando } from './utili.js'
 
 // Il visore delle foto. Si sfoglia con il dito, come nella galleria del
 // telefono: non serve uscire e rientrare per vedere la prossima.
@@ -21,7 +21,8 @@ export default function Visore ({ foto, indice, utente, chiudi, quandoCambia }) 
   // Le due foto vicine si scaricano prima, cosi' scorrendo compaiono subito.
   useEffect(() => {
     for (const vicina of [foto[i - 1], foto[i + 1]]) {
-      if (vicina) { const im = new Image(); im.src = vicina.url }
+      // un video non si scarica prima: pesa, e magari non lo guarda nessuno
+      if (vicina && vicina.tipo !== 'video') { const im = new Image(); im.src = vicina.url }
     }
   }, [i, foto])
 
@@ -68,12 +69,21 @@ export default function Visore ({ foto, indice, utente, chiudi, quandoCambia }) 
         <button className="indietro" onClick={chiudi} aria-label="Chiudi">✕</button>
         <span className="conta">{i + 1} di {quante}</span>
         <span className="spazio" />
-        <button className="azione-testata" onClick={() => setRitocco(true)}>Ritocca</button>
+        {attuale.tipo !== 'video' && (
+          <button className="azione-testata" onClick={() => setRitocco(true)}>Ritocca</button>
+        )}
         <a className="azione-testata" href={attuale.url} target="_blank" rel="noreferrer" download>Scarica</a>
       </div>
 
       <div className="scorri" onPointerDown={giu} onPointerUp={su} onPointerCancel={() => { tocco.current = null }}>
-        <img src={attuale.url} alt={attuale.didascalia || ''} draggable="false" />
+        {attuale.tipo === 'video'
+          ? (
+            <video
+              key={attuale.id} src={attuale.url} poster={attuale.url_mini || undefined}
+              controls playsInline autoPlay
+            />
+            )
+          : <img src={attuale.url} alt={attuale.didascalia || ''} draggable="false" />}
 
         {i > 0 && (
           <button className="freccia sinistra" onClick={() => vai(-1)} aria-label="Foto precedente">‹</button>
@@ -109,7 +119,7 @@ function Piede ({ foto, utente, quandoEliminata }) {
   }
 
   async function elimina () {
-    if (!confirm('Elimino questa foto?')) return
+    if (!confirm(foto.tipo === 'video' ? 'Elimino questo video?' : 'Elimino questa foto?')) return
     await api.eliminaFoto(foto.id)
     quandoEliminata()
   }
@@ -119,6 +129,7 @@ function Piede ({ foto, utente, quandoEliminata }) {
       <div className="chi">
         <span>
           {foto.caricata_da_nome || 'qualcuno'} · {quando(foto.caricata_il)} · {peso(foto.byte)}
+          {foto.tipo === 'video' && ` · video ${durataBreve(foto.durata)}`}
           {foto.ritoccata_il && ' · ritoccata'}
         </span>
         {puoEliminare && (

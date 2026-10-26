@@ -88,3 +88,9 @@ export function quandoLavoro (l, { lungo = false } = {}) {
   const g = etichettaGiorno(l.data_lavoro, { lungo })
   return l.ora_lavoro ? `${g} ${l.ora_lavoro}` : g
 }
+
+// Durata di un video come la si legge sul telefono: 0:08, 1:12.
+export function durataBreve (secondi) {
+  const s = Math.max(0, Math.round(Number(secondi) || 0))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}

@@ -120,6 +120,15 @@ const PASSI = [
     sql: `
       alter table utenti add column if not exists preferenze jsonb not null default '{}'::jsonb;
     `
+  },
+  {
+    // I video stanno insieme alle foto: stesso elenco, stesso visore, stessa
+    // riga nel database. Cambia solo il "tipo" e la durata in secondi.
+    nome: 'video dei lavori',
+    sql: `
+      alter table foto add column if not exists tipo text not null default 'foto';
+      alter table foto add column if not exists durata numeric;
+    `
   }
 ]
 

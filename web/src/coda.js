@@ -1,9 +1,9 @@
-// Foto scattate senza campo.
+// Foto e video presi senza campo.
 //
 // In cantiere capita di essere in un garage o dentro un palazzo dove la
 // linea non prende. Le foto scattate li' non si perdono: restano nella
 // memoria del telefono e partono da sole appena torna il segnale.
-import { caricaFoto } from './api.js'
+import { caricaFoto, caricaVideo } from './api.js'
 
 const NOME_DB = 'fieldbook'
 const DEPOSITO = 'foto-in-attesa'
@@ -35,6 +35,13 @@ function operazione (modo, lavoro) {
 export const accoda = (lavoroId, file) =>
   operazione('readwrite', (d) => d.add({
     lavoroId, file, nome: file.name || 'foto.jpg', messa_il: Date.now()
+  }))
+
+// Il video si mette in attesa gia' alleggerito: cosi' quando torna la linea
+// parte subito, e intanto occupa poco anche nella memoria del telefono.
+export const accodaVideo = (lavoroId, pronto) =>
+  operazione('readwrite', (d) => d.add({
+    lavoroId, video: pronto, nome: 'video', messa_il: Date.now()
   }))
 
 export const inAttesa = () => operazione('readonly', (d) => d.getAll()).catch(() => [])
@@ -79,7 +86,8 @@ export async function svuotaCoda () {
     const righe = await inAttesa()
     for (const riga of righe) {
       try {
-        await caricaFoto(riga.lavoroId, riga.file)
+        if (riga.video) await caricaVideo(riga.lavoroId, riga.video)
+        else await caricaFoto(riga.lavoroId, riga.file)
         await rimuovi(riga.id)
         await aggiornaConto({ errore: '' })
       } catch (e) {
@@ -107,6 +115,18 @@ export async function mandaFotoOAccoda (lavoroId, file) {
   } catch (e) {
     if (!sembraMancanzaDiLinea(e)) throw e
     await accoda(lavoroId, file)
+    await aggiornaConto({ errore: '' })
+    return { in_attesa: true }
+  }
+}
+
+// Stessa cosa per il video gia' preparato.
+export async function mandaVideoOAccoda (lavoroId, pronto) {
+  try {
+    return await caricaVideo(lavoroId, pronto)
+  } catch (e) {
+    if (!sembraMancanzaDiLinea(e)) throw e
+    await accodaVideo(lavoroId, pronto)
     await aggiornaConto({ errore: '' })
     return { in_attesa: true }
   }

@@ -81,8 +81,10 @@ create index on assegnazioni (utente_id);
 create table foto (
   id            uuid primary key default gen_random_uuid(),
   lavoro_id     uuid not null references lavori(id) on delete cascade,
+  tipo          text not null default 'foto',  -- 'foto' oppure 'video'
+  durata        numeric,                       -- secondi, solo per i video
   chiave        text not null unique,          -- oggetto a piena qualita' su R2
-  chiave_mini   text,                          -- miniatura, per non consumare i giga in cantiere
+  chiave_mini   text,                          -- miniatura (per i video: il primo fotogramma)
   didascalia    text,
   larghezza     int,
   altezza       int,

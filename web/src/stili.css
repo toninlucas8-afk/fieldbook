@@ -116,6 +116,15 @@ a { color: inherit; }
 .griglia-foto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .griglia-foto img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: #e7ebf1; }
 .griglia-foto button { padding: 0; position: relative; }
+/* I video nell'elenco: il primo fotogramma, con il triangolo e la durata. */
+.griglia-foto .senza-copertina {
+  display: block; width: 100%; aspect-ratio: 1; border-radius: 8px; background: #16233a;
+}
+.griglia-foto .segno-video {
+  position: absolute; right: 5px; bottom: 5px;
+  background: rgba(8,13,22,.78); color: #fff; font-size: 10.5px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px; letter-spacing: .3px;
+}
 .griglia-foto .nuova::after {
   content: "nuova"; position: absolute; left: 5px; bottom: 5px;
   background: var(--arancio); color: #1b1200; font-size: 10px; font-weight: 700;
@@ -278,6 +287,7 @@ a { color: inherit; }
    e a chi non se lo aspetta. */
 .scorri { position: relative; flex: 1; min-height: 0; display: flex; touch-action: pan-y; }
 .scorri img { flex: 1; min-height: 0; width: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.scorri video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #0b1220; }
 .freccia {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 46px; height: 64px; border-radius: 12px;

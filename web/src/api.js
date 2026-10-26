@@ -168,6 +168,26 @@ export async function caricaFoto (lavoroId, file, { didascalia } = {}) {
   })
 }
 
+// Il video arriva qui gia' alleggerito dal telefono (vedi video.js): qui
+// si carica il filmato, il fotogramma di copertina e si registra la riga.
+export async function caricaVideo (lavoroId, pronto, { didascalia } = {}) {
+  const spazio = await post(`/lavori/${lavoroId}/foto/spazio`, { tipo_mime: pronto.tipoMime })
+
+  await mettiSuR2(spazio.url_put, pronto.video, pronto.tipoMime)
+  if (pronto.poster) await mettiSuR2(spazio.url_put_mini, pronto.poster, 'image/jpeg')
+
+  return post(`/lavori/${lavoroId}/foto`, {
+    chiave: spazio.chiave,
+    chiave_mini: pronto.poster ? spazio.chiave_mini : null,
+    tipo: 'video',
+    durata: pronto.durata,
+    didascalia: didascalia || null,
+    larghezza: pronto.larghezza || null,
+    altezza: pronto.altezza || null,
+    byte: pronto.video.size
+  })
+}
+
 export async function caricaDocumento (lavoroId, file) {
   const tipoMime = file.type || 'application/octet-stream'
   const spazio = await post(`/lavori/${lavoroId}/documenti/spazio`, { nome_file: file.name, tipo_mime: tipoMime })

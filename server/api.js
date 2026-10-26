@@ -169,8 +169,8 @@ const SELECT_LAVORO = `
          (select count(*) from foto f where f.lavoro_id = l.id)::int as foto_totali,
          (select count(*) from documenti d where d.lavoro_id = l.id)::int as documenti_totali,
          (select coalesce(f.chiave_mini, f.chiave) from foto f
-           where f.lavoro_id = l.id
-           order by f.caricata_il desc limit 1) as copertina_chiave,
+           where f.lavoro_id = l.id and (f.tipo = 'foto' or f.chiave_mini is not null)
+           order by (f.tipo = 'foto') desc, f.caricata_il desc limit 1) as copertina_chiave,
          (select count(*) from annotazioni an
            where an.lavoro_id = l.id and not an.fatta)::int as annotazioni_aperte
   from lavori l
@@ -265,7 +265,7 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
   const [foto, documenti, annotazioni, firme, condivisioni] = await Promise.all([
-    q(`select f.id, f.chiave, f.chiave_mini, f.didascalia, f.larghezza, f.altezza,
+    q(`select f.id, f.tipo, f.durata, f.chiave, f.chiave_mini, f.didascalia, f.larghezza, f.altezza,
               f.byte, f.scattata_il, f.caricata_il, f.caricata_da, f.ritoccata_il,
               u.nome as caricata_da_nome
        from foto f left join utenti u on u.id = f.caricata_da
@@ -297,7 +297,7 @@ api.get('/lavori/:id', richiediLogin, avvolgi(async (req, res) => {
     firme: await Promise.all(firme.map(async (f) => ({ ...f, url: await urlPerVedere(f.chiave) }))),
     foto: await Promise.all(foto.map(async (f) => ({
       ...f,
-      url_mini: await urlPerVedere(f.chiave_mini || f.chiave),
+      url_mini: await miniaturaDi(f),
       url: await urlPerVedere(f.chiave)
     }))),
     documenti: await Promise.all(documenti.map(async (d) => ({
@@ -477,13 +477,23 @@ api.delete('/lavori/:id/squadra/:utenteId', richiediLogin, avvolgi(async (req, r
 
 /* ------------------------------------------------------------------- foto */
 
+// Per una foto la miniatura e' la foto rimpicciolita; per un video e' il
+// primo fotogramma. Se il fotogramma non c'e', meglio niente che un video
+// infilato dentro un tag immagine.
+async function miniaturaDi (f) {
+  if (f.chiave_mini) return urlPerVedere(f.chiave_mini)
+  return f.tipo === 'video' ? null : urlPerVedere(f.chiave)
+}
+
 // Passo 1: il telefono chiede dove caricare. Passo 2 (qui sotto) conferma.
 api.post('/lavori/:id/foto/spazio', richiediLogin, avvolgi(async (req, res) => {
   const lavoro = await uno('select id from lavori where id = $1', [req.params.id])
   if (!lavoro) return res.status(404).json({ errore: 'Lavoro non trovato' })
 
   const tipoMime = testoPulito(req.body?.tipo_mime, 100) || 'image/jpeg'
-  if (!tipoMime.startsWith('image/')) return res.status(400).json({ errore: 'Si caricano solo immagini' })
+  if (!tipoMime.startsWith('image/') && !tipoMime.startsWith('video/')) {
+    return res.status(400).json({ errore: 'Si caricano solo foto e video' })
+  }
 
   const chiave = nuovaChiave('foto', lavoro.id, estensionePer(tipoMime))
   const chiaveMini = nuovaChiave('mini', lavoro.id, 'jpg')
@@ -503,12 +513,18 @@ api.post('/lavori/:id/foto', richiediLogin, avvolgi(async (req, res) => {
     return res.status(400).json({ errore: 'Riferimento del file non valido' })
   }
 
+  // Un video e' una riga come le altre: cambia il tipo, e si porta dietro
+  // la durata e il primo fotogramma al posto della miniatura.
+  const tipo = req.body?.tipo === 'video' ? 'video' : 'foto'
+  const durata = tipo === 'video' ? Math.min(600, Math.max(0, Number(req.body?.durata) || 0)) || null : null
+
   const foto = await uno(
-    `insert into foto (lavoro_id, chiave, chiave_mini, didascalia, larghezza,
-                       altezza, byte, scattata_il, caricata_da)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     returning id, chiave, chiave_mini, didascalia, larghezza, altezza, byte, caricata_il`,
-    [req.params.id, chiave, testoPulito(req.body?.chiave_mini, 300), testoPulito(req.body?.didascalia, 500),
+    `insert into foto (lavoro_id, tipo, durata, chiave, chiave_mini, didascalia,
+                       larghezza, altezza, byte, scattata_il, caricata_da)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     returning id, tipo, durata, chiave, chiave_mini, didascalia, larghezza, altezza, byte, caricata_il`,
+    [req.params.id, tipo, durata, chiave, testoPulito(req.body?.chiave_mini, 300),
+     testoPulito(req.body?.didascalia, 500),
      Number(req.body?.larghezza) || null, Number(req.body?.altezza) || null,
      Number(req.body?.byte) || null, req.body?.scattata_il || null, req.utente.id]
   )
@@ -518,7 +534,7 @@ api.post('/lavori/:id/foto', richiediLogin, avvolgi(async (req, res) => {
     ...foto,
     caricata_da: req.utente.id,
     caricata_da_nome: req.utente.nome,
-    url_mini: await urlPerVedere(foto.chiave_mini || foto.chiave),
+    url_mini: await miniaturaDi(foto),
     url: await urlPerVedere(foto.chiave)
   }
   // E' questo che fa comparire la foto sugli altri telefoni, senza ricaricare niente.
@@ -580,7 +596,7 @@ api.post('/foto/:id/ritocco', richiediLogin, avvolgi(async (req, res) => {
 
   const completa = {
     ...foto,
-    url_mini: await urlPerVedere(foto.chiave_mini || foto.chiave),
+    url_mini: await miniaturaDi(foto),
     url: await urlPerVedere(foto.chiave)
   }
   await pubblica('foto_aggiornata', { lavoroId: foto.lavoro_id, utenteId: req.utente.id, payload: completa })
@@ -692,7 +708,7 @@ export async function resocontoPubblico (token) {
   if (!lavoro) return null
 
   const [foto, firme, daFare] = await Promise.all([
-    q(`select chiave, chiave_mini, didascalia from foto
+    q(`select tipo, durata, chiave, chiave_mini, didascalia from foto
        where lavoro_id = $1 order by caricata_il asc limit 300`, [condivisione.lavoro_id]),
     q(`select chiave, nome_cliente, nota, firmata_il from firme
        where lavoro_id = $1 order by firmata_il desc limit 5`, [condivisione.lavoro_id]),
@@ -709,8 +725,10 @@ export async function resocontoPubblico (token) {
     lavoro,
     daFare: daFare.map((r) => r.testo),
     foto: await Promise.all(foto.map(async (f) => ({
+      tipo: f.tipo,
+      durata: f.durata,
       didascalia: f.didascalia,
-      mini: await urlPerVedere(f.chiave_mini || f.chiave),
+      mini: await miniaturaDi(f),
       piena: await urlPerVedere(f.chiave)
     }))),
     firme: await Promise.all(firme.map(async (f) => ({
@@ -864,8 +882,9 @@ api.get('/riassunto', richiediLogin, avvolgi(async (req, res) => {
     ),
     q(`select id, testo from note where utente_id = $1 and not fatta
         order by creata_il desc limit 3`, [req.utente.id]),
-    q(`select f.id, f.chiave, f.chiave_mini, f.lavoro_id, l.titolo as lavoro_titolo
+    q(`select f.id, f.tipo, f.chiave, f.chiave_mini, f.lavoro_id, l.titolo as lavoro_titolo
          from foto f join lavori l on l.id = f.lavoro_id
+        where f.tipo = 'foto' or f.chiave_mini is not null
         order by f.caricata_il desc limit 8`)
   ])
 
@@ -887,9 +906,10 @@ api.get('/riassunto', richiediLogin, avvolgi(async (req, res) => {
     note: { quante: noteAperte.quante, prime: note },
     ultime_foto: await Promise.all(ultimeFoto.map(async (f) => ({
       id: f.id,
+      tipo: f.tipo,
       lavoro_id: f.lavoro_id,
       lavoro_titolo: f.lavoro_titolo,
-      url_mini: await urlPerVedere(f.chiave_mini || f.chiave)
+      url_mini: await miniaturaDi(f)
     })))
   })
 }))
