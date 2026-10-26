@@ -98,24 +98,44 @@ export default function Squadra ({ utente, indietro, apriSubitoMioPin }) {
 
 // Il PIN si vede solo adesso: dopo resta salvato cifrato e non e' piu' leggibile.
 function PinDaConsegnare ({ nome, pin, chiudi }) {
-  const messaggio = `Ciao ${nome.split(' ')[0]}, questo è il tuo accesso a Silcom.\nNome: ${nome}\nPIN: ${pin}\n\nApri il link dell'app, entra con nome e PIN, poi aggiungila alla schermata iniziale.`
+  // L'indirizzo e' quello da cui l'app e' aperta adesso: cosi' resta giusto
+  // anche se un domani cambia.
+  const indirizzo = location.origin
+
+  const messaggio = [
+    `Ciao ${nome.split(' ')[0]}, questo è il tuo accesso a Silcom, l'app dei lavori.`,
+    '',
+    `App: ${indirizzo}`,
+    `Nome: ${nome}`,
+    `PIN: ${pin}`,
+    '',
+    'Apri il link ed entra con nome e PIN.',
+    'Poi dal menu ⋮ di Chrome scegli "Aggiungi a schermata Home": così ti resta come un\'app.'
+  ].join('\n')
+
+  const [copiato, setCopiato] = useState(false)
+
+  async function copia () {
+    try { await navigator.clipboard?.writeText(messaggio) } catch { /* niente appunti, pazienza */ }
+    setCopiato(true)
+    setTimeout(() => setCopiato(false), 2000)
+  }
 
   return (
     <div className="pin-mostrato">
       <strong>PIN per {nome}</strong>
       <div className="cifre">{pin}</div>
-      <small>Questo PIN non sarà più visibile. Mandaglielo adesso.</small>
+      <small>Questo PIN non sarà più visibile. Mandaglielo adesso: nel messaggio c'è già il link dell'app.</small>
+      <div className="indirizzo-app">{indirizzo}</div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <a className="bottone arancio piccolo" style={{ flex: 1 }}
-          href={`https://wa.me/?text=${encodeURIComponent(messaggio)}`} target="_blank" rel="noreferrer">
-          Manda su WhatsApp
-        </a>
-        <button className="bottone chiaro piccolo" style={{ flex: 1 }}
-          onClick={() => navigator.clipboard?.writeText(messaggio)}>
-          Copia
-        </button>
-      </div>
+      <a className="bottone arancio piccolo" style={{ width: '100%' }}
+        href={`https://wa.me/?text=${encodeURIComponent(messaggio)}`} target="_blank" rel="noreferrer">
+        Manda su WhatsApp
+      </a>
+
+      <button className="bottone chiaro piccolo" style={{ width: '100%', marginTop: 8 }} onClick={copia}>
+        {copiato ? 'Copiato' : 'Copia il messaggio'}
+      </button>
 
       <button className="bottone chiaro piccolo" style={{ width: '100%', marginTop: 8 }} onClick={chiudi}>
         Fatto, l'ho mandato
