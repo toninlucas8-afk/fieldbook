@@ -22,10 +22,31 @@ export const sonoBuono = () =>
 
 // Prima l'mp4: e' quello che si apre dappertutto, anche sugli iPhone di chi
 // riceve il resoconto. Il webm resta come riserva.
-const formato = () =>
-  ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8', 'video/webm']
-    .find((t) => MediaRecorder.isTypeSupported?.(t)) || ''
+const formato = (conAudio) => {
+  const prove = conAudio
+    ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2',
+        'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    : ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8', 'video/webm']
+  return prove.find((t) => MediaRecorder.isTypeSupported?.(t)) || ''
+}
+
+// Il sonoro si prende senza farlo uscire dall'altoparlante: il video gira
+// zitto nel telefono mentre si registra. Se qualcosa non va, pazienza: il
+// filmato si salva lo stesso, solo muto.
+function prendiIlSonoro (video) {
+  try {
+    const Audio = window.AudioContext || window.webkitAudioContext
+    if (!Audio) return null
+    const ctx = new Audio()
+    ctx.resume?.()
+    const uscita = ctx.createMediaStreamDestination()
+    ctx.createMediaElementSource(video).connect(uscita)
+    return { traccia: uscita.stream.getAudioTracks()[0] || null, ctx }
+  } catch {
+    return null
+  }
+}
 
 // Il primo fotogramma, che serve da copertina nell'elenco e nel resoconto.
 function fotogramma (tela, ctx, video, quando) {
@@ -42,7 +63,6 @@ function fotogramma (tela, ctx, video, quando) {
 export function apriVideo (file) {
   return new Promise((risolvi, rifiuta) => {
     const video = document.createElement('video')
-    video.muted = true
     video.playsInline = true
     video.preload = 'auto'
     video.src = URL.createObjectURL(file)
@@ -75,10 +95,18 @@ export async function preparaVideo (file, avanzamento = () => {}) {
   const poster = await fotogramma(tela, ctx, video, Math.min(0.4, durata / 4))
 
   const flusso = tela.captureStream(30)
-  const mime = formato()
+
+  const sonoro = prendiIlSonoro(video)
+  if (sonoro?.traccia) flusso.addTrack(sonoro.traccia)
+  // Se il sonoro non si riesce a prendere, almeno il telefono deve stare
+  // zitto mentre prepara: nessuno vuole sentire il video a tutto volume.
+  else video.muted = true
+
+  const mime = formato(!!sonoro?.traccia)
   const registratore = new MediaRecorder(flusso, {
     ...(mime ? { mimeType: mime } : {}),
-    videoBitsPerSecond: BIT_AL_SECONDO
+    videoBitsPerSecond: BIT_AL_SECONDO,
+    ...(sonoro?.traccia ? { audioBitsPerSecond: 96_000 } : {})
   })
 
   const pezzi = []
@@ -90,7 +118,14 @@ export async function preparaVideo (file, avanzamento = () => {}) {
   video.onseeked = null
 
   registratore.start(1000)
-  try { await video.play() } catch { /* parte comunque col disegno */ }
+  try {
+    await video.play()
+  } catch {
+    // Certi telefoni non fanno partire un video con l'audio se non si e'
+    // appena toccato lo schermo: allora si va avanti muti.
+    video.muted = true
+    try { await video.play() } catch { /* si disegna comunque */ }
+  }
 
   let chiuso = false
   const chiudi = () => {
@@ -114,6 +149,7 @@ export async function preparaVideo (file, avanzamento = () => {}) {
 
   await finito
   clearTimeout(salvagente)
+  sonoro?.ctx?.close?.()
   URL.revokeObjectURL(video.src)
   avanzamento(1)
 
